@@ -1,0 +1,48 @@
+# ======== Node / npm ========
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+package-lock.json
+
+# ======== Environment Variables ========
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# ======== Build Outputs ========
+dist/
+build/
+out/
+coverage/
+
+# ======== Logs ========
+logs/
+*.log
+lerna-debug.log
+
+# ======== OS / Editor ========
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ======== MongoDB / Database ========
+*.mongodb
+*.db
+
+# ======== Ngrok ========
+ngrok.yml
+
+# ======== Misc ========
+*.pem
+*.seed
+*.pid
+*.tgz
+.cache/
+.temp/
