@@ -26,6 +26,7 @@ const inspectionRequestSchema = new mongoose.Schema(
       year: { type: Number, required: true },
       vin: { type: String, default: '' },
       registrationNumber: { type: String, default: '' },
+      price: { type: Number, default: null },
     },
 
     schedule: {
@@ -62,6 +63,11 @@ const inspectionRequestSchema = new mongoose.Schema(
       currency: String,
       provider: String,
       providerPaymentId: String,
+    },
+
+    customerNotes: {
+      type: String,
+      default: '',
     },
   },
   { timestamps: true }

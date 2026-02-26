@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import customerRoutes from './routes/customer.routes.js';
+import vehicleMasterRoutes from './routes/vehicleMaster.routes.js';
 import { env } from './config/env.js';
 import logger from './utils/logger.js';
 
@@ -50,6 +51,7 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.use('/api/customer/vehicle-master', vehicleMasterRoutes);
 app.use('/api/customer', customerRoutes);
 
 export default app;

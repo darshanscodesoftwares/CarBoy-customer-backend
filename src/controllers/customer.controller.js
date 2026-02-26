@@ -1,4 +1,4 @@
-import { submitInspectionRequest, getInspectionRequests } from '../services/customer.service.js';
+import { submitInspectionRequest, getInspectionRequests, getInspectionRequestById } from '../services/customer.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
 
@@ -31,5 +31,24 @@ export async function listInspectionRequests(req, res) {
       'List inspection requests failed'
     );
     return errorResponse(res, 'Unable to fetch inspection requests', 500);
+  }
+}
+
+export async function getInspectionRequestDetail(req, res) {
+  try {
+    const { requestId } = req.params;
+    const request = await getInspectionRequestById(requestId);
+
+    return successResponse(res, request, 'Inspection request fetched successfully');
+  } catch (error) {
+    logger.error(
+      { event: 'get_inspection_request_detail_failed', requestId: req.params.requestId, error: error.message },
+      'Get inspection request detail failed'
+    );
+
+    const statusCode = error.statusCode || 500;
+    const message = error.message || 'Unable to fetch inspection request';
+
+    return errorResponse(res, message, statusCode);
   }
 }
