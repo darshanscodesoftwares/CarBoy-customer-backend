@@ -3,6 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import customerRoutes from './routes/customer.routes.js';
 import vehicleMasterRoutes from './routes/vehicleMaster.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
 import { env } from './config/env.js';
 import logger from './utils/logger.js';
 
@@ -28,6 +29,24 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
+
+// Middleware to capture raw body for webhook signature verification
+app.use((req, res, next) => {
+  if (req.path === '/api/customer/payments/webhook') {
+    let rawBody = '';
+    req.on('data', (chunk) => {
+      rawBody += chunk.toString();
+    });
+    req.on('end', () => {
+      req.rawBody = rawBody;
+      req.body = JSON.parse(rawBody || '{}');
+      next();
+    });
+  } else {
+    next();
+  }
+});
+
 app.use(express.json());
 app.use(morgan('combined'));
 
@@ -53,5 +72,6 @@ app.get('/health', (req, res) => {
 
 app.use('/api/customer/vehicle-master', vehicleMasterRoutes);
 app.use('/api/customer', customerRoutes);
+app.use('/api/customer/payments', paymentRoutes);
 
 export default app;
