@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import logger from '../utils/logger.js';
 import { AppError } from '../utils/errors.js';
 import InspectionRequest from '../models/InspectionRequest.js';
+import { forwardInspectionRequestToAdmin } from './customer.service.js';
 
 // Initialize Razorpay instance
 const razorpayInstance = new Razorpay({
@@ -119,30 +120,64 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
       throw new AppError('Inspection request not found for this order', 404);
     }
 
-    // Prevent duplicate payment status updates
-    if (inspectionRequest.payment.status === 'PAID') {
+    // Idempotency: if request already forwarded, skip processing
+    if (inspectionRequest.status === 'FORWARDED') {
       logger.warn(
         {
-          event: 'duplicate_payment_confirmation',
+          event: 'duplicate_payment_confirmation_already_forwarded',
           razorpayOrderId,
           requestNumber: inspectionRequest.requestNumber,
         },
-        'Payment already marked as PAID, skipping update'
+        'Request already forwarded, skipping duplicate payment webhook processing'
       );
 
       return inspectionRequest;
     }
 
-    // Update payment details
-    const updatedRequest = await InspectionRequest.findByIdAndUpdate(
-      inspectionRequest._id,
-      {
-        'payment.status': 'PAID',
-        'payment.razorpayPaymentId': razorpayPaymentId,
-        'payment.paidAt': new Date(),
-      },
-      { new: true }
-    );
+    let paidRequest = inspectionRequest;
+
+    // Update payment details and request status to PAID
+    if (inspectionRequest.payment.status !== 'PAID' || inspectionRequest.status !== 'PAID') {
+      paidRequest = await InspectionRequest.findByIdAndUpdate(
+        inspectionRequest._id,
+        {
+          status: 'PAID',
+          'payment.status': 'PAID',
+          'payment.razorpayPaymentId': razorpayPaymentId,
+          'payment.paidAt': new Date(),
+        },
+        { new: true }
+      );
+    } else {
+      logger.info(
+        {
+          event: 'payment_already_marked_paid',
+          razorpayOrderId,
+          requestNumber: inspectionRequest.requestNumber,
+        },
+        'Payment and request status already marked as PAID, attempting admin forwarding'
+      );
+    }
+
+    if (!paidRequest) {
+      throw new AppError('Failed to update inspection request after payment', 500);
+    }
+
+    const adminResponse = await forwardInspectionRequestToAdmin(paidRequest);
+
+    let finalRequest = paidRequest;
+    if (adminResponse) {
+      const forwardedUpdate = { status: 'FORWARDED' };
+      if (adminResponse.data?.id) {
+        forwardedUpdate.adminJobId = adminResponse.data.id;
+      }
+
+      finalRequest = await InspectionRequest.findByIdAndUpdate(
+        paidRequest._id,
+        forwardedUpdate,
+        { new: true }
+      );
+    }
 
     logger.info(
       {
@@ -154,7 +189,7 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
       'Payment marked as successful'
     );
 
-    return updatedRequest;
+    return finalRequest;
   } catch (error) {
     logger.error(
       {

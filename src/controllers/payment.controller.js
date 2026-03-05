@@ -2,6 +2,7 @@ import InspectionRequest from '../models/InspectionRequest.js';
 import { createRazorpayOrder, verifyWebhookSignature, markPaymentSuccessful } from '../services/payment.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import { env } from '../config/env.js';
+import { getWebhookUrl } from '../config/app.config.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -74,6 +75,7 @@ export async function createPaymentOrder(req, res) {
         requestNumber,
         razorpayOrderId: razorpayOrder.id,
         amount,
+        webhookUrl: getWebhookUrl('/api/customer/payments/webhook'),
       },
       'Payment order created and saved'
     );

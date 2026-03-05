@@ -9,7 +9,7 @@ export async function createInspectionRequest(req, res) {
     return successResponse(
       res,
       result,
-      'Inspection request saved. Awaiting admin assignment.',
+      'Inspection request saved. Awaiting payment confirmation.',
       201
     );
   } catch (error) {

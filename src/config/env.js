@@ -16,7 +16,8 @@ export const env = {
   adminBaseUrl: process.env.ADMIN_BASE_URL,
   adminEmail: process.env.ADMIN_EMAIL,
   adminPassword: process.env.ADMIN_PASSWORD,
-  publicBaseUrl: process.env.PUBLIC_BASE_URL,
+  appBaseUrl: process.env.APP_BASE_URL || `http://localhost:${Number(process.env.PORT) || 5005}`,
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || '', // For ngrok or production, leave empty for localhost
   corsOrigins: (process.env.CORS_ORIGINS || '').split(',').map((origin) => origin.trim().replace(/\/$/, '')).filter(Boolean),
   adminTimeoutMs: Number(process.env.ADMIN_TIMEOUT_MS) || 10000,
   logLevel: process.env.LOG_LEVEL || 'info',

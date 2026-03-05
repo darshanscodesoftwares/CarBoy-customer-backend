@@ -49,8 +49,8 @@ const inspectionRequestSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['PENDING', 'FORWARDED', 'FAILED'],
-      default: 'PENDING',
+      enum: ['PENDING_PAYMENT', 'PAID', 'FORWARDED', 'FAILED'],
+      default: 'PENDING_PAYMENT',
     },
 
     payment: {

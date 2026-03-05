@@ -21,7 +21,7 @@ export async function submitInspectionRequest(payload) {
     const inspectionRequest = await InspectionRequest.create({
       ...enrichedPayload,
       adminJobId: null,
-      status: 'PENDING',
+      status: 'PENDING_PAYMENT',
     });
 
     logger.info(
@@ -32,55 +32,6 @@ export async function submitInspectionRequest(payload) {
       },
       'Inspection request saved'
     );
-
-    // Forward to admin with enriched vehicleSnapshot (including price) and customerNotes
-    try {
-      // Enrich customerSnapshot with notes for admin
-      const customerSnapshotWithNotes = {
-        ...enrichedPayload.customerSnapshot,
-        notes: customerNotes || '',
-      };
-
-      const adminJobPayload = {
-        serviceType: enrichedPayload.serviceType,
-        customerSnapshot: customerSnapshotWithNotes,
-        vehicleSnapshot: enrichedVehicleSnapshot,
-        schedule: enrichedPayload.schedule,
-        location: enrichedPayload.location,
-        customerNotes, // keep for backward compatibility
-        requestNumber: inspectionRequest.requestNumber,
-      };
-
-      const adminResponse = await createAdminJob(adminJobPayload);
-
-      logger.info(
-        {
-          event: 'admin_job_created',
-          requestNumber: inspectionRequest.requestNumber,
-          adminJobId: adminResponse.data?.id,
-        },
-        'Inspection request forwarded to admin'
-      );
-
-      // Update adminJobId if returned from admin
-      if (adminResponse.data?.id) {
-        await InspectionRequest.findByIdAndUpdate(
-          inspectionRequest._id,
-          { adminJobId: adminResponse.data.id, status: 'FORWARDED' },
-          { new: true }
-        );
-      }
-    } catch (adminError) {
-      logger.warn(
-        {
-          event: 'admin_job_creation_failed',
-          requestNumber: inspectionRequest.requestNumber,
-          error: adminError.message,
-        },
-        'Failed to forward inspection request to admin, will retry later'
-      );
-      // Continue without throwing - inspection request is saved locally
-    }
 
     return {
       requestId: inspectionRequest.requestNumber,
@@ -98,6 +49,68 @@ export async function submitInspectionRequest(payload) {
 
     throw error;
   }
+}
+
+export async function forwardInspectionRequestToAdmin(inspectionRequest) {
+  if (!inspectionRequest) {
+    throw new AppError('Inspection request is required for admin forwarding', 400);
+  }
+
+  if (inspectionRequest.status === 'FORWARDED') {
+    logger.info(
+      {
+        event: 'admin_forwarding_skipped_already_forwarded',
+        requestNumber: inspectionRequest.requestNumber,
+      },
+      'Inspection request already forwarded to admin'
+    );
+    return null;
+  }
+
+  if (inspectionRequest.status !== 'PAID') {
+    logger.warn(
+      {
+        event: 'admin_forwarding_skipped_not_paid',
+        requestNumber: inspectionRequest.requestNumber,
+        status: inspectionRequest.status,
+      },
+      'Skipping admin forwarding because request is not PAID'
+    );
+    return null;
+  }
+
+  const customerNotes = (inspectionRequest.customerNotes || inspectionRequest.customerSnapshot?.notes || '')
+    .toString()
+    .trim()
+    .slice(0, 1000);
+
+  const customerSnapshotWithNotes = {
+    ...inspectionRequest.customerSnapshot,
+    notes: customerNotes || '',
+  };
+
+  const adminJobPayload = {
+    serviceType: inspectionRequest.serviceType,
+    customerSnapshot: customerSnapshotWithNotes,
+    vehicleSnapshot: inspectionRequest.vehicleSnapshot,
+    schedule: inspectionRequest.schedule,
+    location: inspectionRequest.location,
+    customerNotes,
+    requestNumber: inspectionRequest.requestNumber,
+  };
+
+  const adminResponse = await createAdminJob(adminJobPayload);
+
+  logger.info(
+    {
+      event: 'admin_job_created',
+      requestNumber: inspectionRequest.requestNumber,
+      adminJobId: adminResponse.data?.id,
+    },
+    'Inspection request forwarded to admin'
+  );
+
+  return adminResponse;
 }
 
 export async function getInspectionRequests() {

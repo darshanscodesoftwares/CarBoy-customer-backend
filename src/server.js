@@ -1,6 +1,7 @@
 import app from './app.js';
 import connectDB from './config/db.js';
 import { env } from './config/env.js';
+import { getAppConfig } from './config/app.config.js';
 import logger from './utils/logger.js';
 
 async function startServer() {
@@ -18,12 +19,16 @@ async function startServer() {
   await connectDB();
 
   app.listen(env.port, () => {
+    const appConfig = getAppConfig();
     logger.info(
       {
         event: 'server_started',
         port: env.port,
         environment: env.nodeEnv,
-        baseUrl: env.publicBaseUrl,
+        appBaseUrl: appConfig.appBaseUrl,
+        publicBaseUrl: appConfig.publicBaseUrl,
+        isPublicUrl: appConfig.isPublicUrl,
+        webhookUrl: appConfig.webhookUrl,
       },
       `✅ Server running on port ${env.port}`
     );
