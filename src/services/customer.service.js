@@ -90,6 +90,7 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
   };
 
   const adminJobPayload = {
+    status: 'PAID',
     serviceType: inspectionRequest.serviceType,
     customerSnapshot: customerSnapshotWithNotes,
     vehicleSnapshot: inspectionRequest.vehicleSnapshot,

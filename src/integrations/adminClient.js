@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 import { AppError } from '../utils/errors.js';
 
 export async function createAdminJob(jobPayload) {
-  const url = `${env.adminBaseUrl}/jobs`;
+  const url = `${env.adminBaseUrl}/inspection-requests`;
 
   try {
     const response = await axios.post(url, jobPayload, {
