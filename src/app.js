@@ -11,10 +11,17 @@ const app = express();
 
 const corsOptions = {
   origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
-    const normalized = origin.replace(/\/$/, '');
+    // Allow any origin in development for ngrok + localhost flexibility
+    // In production, use env.corsOrigins to restrict
+    if (env.nodeEnv === 'development') {
+      return callback(null, true);
+    }
 
+    // Production: strict allowlist
+    const normalized = origin.replace(/\/$/, '');
     if (env.corsOrigins.includes(normalized)) {
       return callback(null, true);
     }
@@ -24,30 +31,22 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'ngrok-skip-browser-warning'
+  ],
 };
 
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
-// Middleware to capture raw body for webhook signature verification
-app.use((req, res, next) => {
-  if (req.path === '/api/customer/payments/webhook') {
-    let rawBody = '';
-    req.on('data', (chunk) => {
-      rawBody += chunk.toString();
-    });
-    req.on('end', () => {
-      req.rawBody = rawBody;
-      req.body = JSON.parse(rawBody || '{}');
-      next();
-    });
-  } else {
-    next();
-  }
-});
+// Capture raw body for webhook signature verification BEFORE JSON parsing
+app.use('/api/customer/payments/webhook', express.raw({ type: 'application/json' }));
 
+// Parse JSON for all other routes
 app.use(express.json());
+
 app.use(morgan('combined'));
 
 app.use((req, res, next) => {

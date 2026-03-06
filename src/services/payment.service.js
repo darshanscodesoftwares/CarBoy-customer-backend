@@ -163,6 +163,8 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
       throw new AppError('Failed to update inspection request after payment', 500);
     }
 
+    // Forward to admin ONLY after payment is confirmed (status = PAID)
+    // Admin payload will include status: 'PAID' so admin can assign technician
     const adminResponse = await forwardInspectionRequestToAdmin(paidRequest);
 
     let finalRequest = paidRequest;

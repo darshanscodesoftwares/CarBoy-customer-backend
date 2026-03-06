@@ -4,6 +4,8 @@ import { env } from './config/env.js';
 import { getAppConfig } from './config/app.config.js';
 import logger from './utils/logger.js';
 
+app.set("trust proxy", true);
+
 async function startServer() {
   // Log environment configuration
   logger.info(

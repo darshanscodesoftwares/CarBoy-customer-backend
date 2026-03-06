@@ -129,8 +129,17 @@ export async function handlePaymentWebhook(req, res) {
       return errorResponse(res, 'Missing signature', 401);
     }
 
-    // Get raw body for signature verification
-    const rawBody = req.rawBody || JSON.stringify(req.body);
+    // req.body is already the raw Buffer from express.raw()
+    const rawBody = req.body;
+
+    logger.info(
+      {
+        event: 'webhook_signature_verification',
+        rawBodyLength: rawBody.length,
+        signature: signature.substring(0, 20) + '...',
+      },
+      'Verifying webhook signature'
+    );
 
     // Verify webhook signature
     const isValid = verifyWebhookSignature(rawBody, signature);
@@ -145,7 +154,22 @@ export async function handlePaymentWebhook(req, res) {
       return errorResponse(res, 'Invalid signature', 401);
     }
 
-    const { event, payload } = req.body;
+    // Parse JSON body after signature verification
+    let webhookData;
+    try {
+      webhookData = JSON.parse(rawBody.toString('utf8'));
+    } catch (parseError) {
+      logger.error(
+        {
+          event: 'webhook_json_parse_failed',
+          error: parseError.message,
+        },
+        'Failed to parse webhook JSON'
+      );
+      return errorResponse(res, 'Invalid JSON in webhook body', 400);
+    }
+
+    const { event, payload } = webhookData;
 
     logger.info(
       {

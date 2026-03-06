@@ -4,20 +4,37 @@ import { createAdminJob } from '../integrations/adminClient.js';
 import logger from '../utils/logger.js';
 import { AppError } from '../utils/errors.js';
 
+/**
+ * Submit inspection request - ONLY creates local record
+ * Admin forwarding happens ONLY after Razorpay payment confirmation
+ * @param {Object} payload - Inspection request payload
+ * @returns {Promise<Object>} { requestId, adminJobId: null, status: 'PENDING_PAYMENT' }
+ */
 export async function submitInspectionRequest(payload) {
   try {
     // Extract and trim customerNotes from payload or customerSnapshot
     const customerNotes = (payload.customerNotes || payload.customerSnapshot?.notes || '').toString().trim().slice(0, 1000);
 
-    // Enrich vehicleSnapshot with price before creating inspection request
-    const enrichedVehicleSnapshot = await enrichVehicleSnapshotWithPrice(payload.vehicleSnapshot);
+    // Enrich vehicleSnapshot with price - gracefully handle admin service failures
+    let enrichedVehicleSnapshot;
+    try {
+      enrichedVehicleSnapshot = await enrichVehicleSnapshotWithPrice(payload.vehicleSnapshot);
+    } catch (enrichError) {
+      logger.warn(
+        { event: 'price_enrichment_failed', error: enrichError.message },
+        'Failed to enrich vehicle price, continuing with price: null'
+      );
+      enrichedVehicleSnapshot = { ...payload.vehicleSnapshot, price: null };
+    }
+
     const enrichedPayload = {
       ...payload,
       vehicleSnapshot: enrichedVehicleSnapshot,
       customerNotes,
     };
 
-    // Save to database
+    // Save to database with PENDING_PAYMENT status
+    // Admin will receive this request ONLY after payment is confirmed via webhook
     const inspectionRequest = await InspectionRequest.create({
       ...enrichedPayload,
       adminJobId: null,

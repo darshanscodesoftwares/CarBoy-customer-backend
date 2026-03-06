@@ -9,9 +9,11 @@ function isValidDateInput(dateInput) {
 export function validateInspectionRequest(req, res, next) {
   const { serviceType, customerSnapshot, vehicleSnapshot, schedule, location } = req.body;
 
+  console.log("🔍 Backend received serviceType:", serviceType, "Type:", typeof serviceType);
+
   if (!['PDI', 'UCI'].includes(serviceType)) {
-    logger.warn({ event: 'validation_failed', reason: 'invalid_service_type' }, 'Validation failed');
-    return errorResponse(res, 'serviceType must be either PDI or UCI', 400);
+    logger.warn({ event: 'validation_failed', reason: 'invalid_service_type', receivedValue: serviceType }, 'Validation failed');
+    return errorResponse(res, `serviceType must be either PDI or UCI (received: "${serviceType}")`, 400);
   }
 
   if (!customerSnapshot?.name || !customerSnapshot?.phone || !customerSnapshot?.email) {
