@@ -10,7 +10,7 @@ import { AppError } from '../utils/errors.js';
  * @param {Object} payload - Inspection request payload
  * @returns {Promise<Object>} { requestId, adminJobId: null, status: 'PENDING_PAYMENT' }
  */
-export async function submitInspectionRequest(payload) {
+export async function submitInspectionRequest(payload, userId) {
   try {
     // Extract and trim customerNotes from payload or customerSnapshot
     const customerNotes = (payload.customerNotes || payload.customerSnapshot?.notes || '').toString().trim().slice(0, 1000);
@@ -37,6 +37,7 @@ export async function submitInspectionRequest(payload) {
     // Admin will receive this request ONLY after payment is confirmed via webhook
     const inspectionRequest = await InspectionRequest.create({
       ...enrichedPayload,
+      userId: userId || null,
       adminJobId: null,
       status: 'PENDING_PAYMENT',
     });
@@ -131,8 +132,9 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
   return adminResponse;
 }
 
-export async function getInspectionRequests() {
-  const requests = await InspectionRequest.find()
+export async function getInspectionRequests(userId) {
+  const filter = userId ? { userId } : {};
+  const requests = await InspectionRequest.find(filter)
     .sort({ createdAt: -1 })
     .select('requestNumber serviceType status schedule.date createdAt');
 

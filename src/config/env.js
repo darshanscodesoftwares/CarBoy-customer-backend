@@ -24,12 +24,22 @@ export const env = {
   razorpayKeyId: process.env.RAZORPAY_KEY_ID,
   razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET,
   razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
+
+  // Auth / JWT
+  jwtSecret: process.env.JWT_SECRET || 'carboy-dev-jwt-secret-change-in-production',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+
+  // OAuth - Google
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+
+  // OAuth - Apple
+  appleClientId: process.env.APPLE_CLIENT_ID || '', // Your app's Services ID (e.g. com.carboy.auth)
 };
 
 // Validate required environment variables
 function validateEnv() {
   const required = ['MONGODB_URI', 'ADMIN_BASE_URL', 'ADMIN_EMAIL', 'ADMIN_PASSWORD'];
-  const requiredInProduction = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET'];
+  const requiredInProduction = ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'JWT_SECRET', 'GOOGLE_CLIENT_ID'];
 
   const missing = required.filter((key) => !process.env[key]);
   const missingInProd = nodeEnv === 'production' ? requiredInProduction.filter((key) => !process.env[key]) : [];

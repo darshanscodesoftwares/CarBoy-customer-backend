@@ -2,6 +2,13 @@ import mongoose from 'mongoose';
 
 const inspectionRequestSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true,
+    },
+
     requestNumber: {
       type: String,
       unique: true,

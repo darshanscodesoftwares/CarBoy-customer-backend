@@ -4,7 +4,7 @@ import logger from '../utils/logger.js';
 
 export async function createInspectionRequest(req, res) {
   try {
-    const result = await submitInspectionRequest(req.body);
+    const result = await submitInspectionRequest(req.body, req.userId);
 
     return successResponse(
       res,
@@ -23,7 +23,7 @@ export async function createInspectionRequest(req, res) {
 
 export async function listInspectionRequests(req, res) {
   try {
-    const requests = await getInspectionRequests();
+    const requests = await getInspectionRequests(req.userId);
     return successResponse(res, requests, 'Inspection requests fetched successfully');
   } catch (error) {
     logger.error(
