@@ -181,21 +181,22 @@ export async function handlePaymentWebhook(req, res) {
 
     // Only process payment.authorized and payment.captured events
     if (event === 'payment.authorized' || event === 'payment.captured') {
-      const { payment, order } = payload;
+      const paymentEntity = payload?.payment?.entity;
 
-      if (!payment || !order) {
+      if (!paymentEntity) {
         logger.warn(
           {
             event: 'webhook_invalid_payload',
             eventType: event,
+            payload,
           },
-          'Webhook payload missing payment or order details'
+          'Webhook payload missing payment entity'
         );
         return successResponse(res, {}, 'Webhook processed', 200);
       }
 
-      const razorpayOrderId = order.entity.id;
-      const razorpayPaymentId = payment.entity.id;
+      const razorpayPaymentId = paymentEntity.id;
+      const razorpayOrderId = paymentEntity.order_id;
 
       logger.info(
         {
