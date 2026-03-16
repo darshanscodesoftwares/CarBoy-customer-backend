@@ -72,7 +72,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api/customer/auth', authRoutes);
 app.use('/api/customer/vehicle-master', vehicleMasterRoutes);
-app.use('/api/customer', customerRoutes);
 app.use('/api/customer/payments', paymentRoutes);
+app.use('/api/customer', customerRoutes);
 
 export default app;

@@ -58,7 +58,7 @@ export async function createPaymentOrder(req, res) {
     });
 
     // Save order details to inspection request
-    const updatedRequest = await InspectionRequest.findByIdAndUpdate(
+    await InspectionRequest.findByIdAndUpdate(
       inspectionRequest._id,
       {
         'payment.status': 'PENDING',

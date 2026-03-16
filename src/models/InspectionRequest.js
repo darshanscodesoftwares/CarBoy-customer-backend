@@ -17,7 +17,7 @@ const inspectionRequestSchema = new mongoose.Schema(
 
     serviceType: {
       type: String,
-      enum: ['PDI', 'UCI'],
+      enum: ['PDI', 'UCI', 'VSH'],
       required: true,
     },
 
@@ -86,8 +86,18 @@ const inspectionRequestSchema = new mongoose.Schema(
 inspectionRequestSchema.pre('save', async function preSave(next) {
   if (this.requestNumber) return next();
 
-  const totalCount = await mongoose.model('InspectionRequest').countDocuments();
-  this.requestNumber = `REQ-${String(totalCount + 1).padStart(6, '0')}`;
+  const last = await mongoose.model('InspectionRequest')
+    .findOne({}, { requestNumber: 1 })
+    .sort({ requestNumber: -1 })
+    .lean();
+
+  let nextNum = 1;
+  if (last?.requestNumber) {
+    const match = last.requestNumber.match(/^REQ-(\d+)$/);
+    if (match) nextNum = parseInt(match[1], 10) + 1;
+  }
+
+  this.requestNumber = `REQ-${String(nextNum).padStart(6, '0')}`;
   return next();
 });
 

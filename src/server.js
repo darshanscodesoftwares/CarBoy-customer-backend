@@ -8,12 +8,17 @@ app.set("trust proxy", true);
 
 async function startServer() {
   // Log environment configuration
+  const webhookSecretLoaded = env.razorpayWebhookSecret
+    ? `"${env.razorpayWebhookSecret.slice(0, 4)}...${env.razorpayWebhookSecret.slice(-4)}" (${env.razorpayWebhookSecret.length} chars)`
+    : 'NOT SET';
+
   logger.info(
     {
       event: 'environment_info',
       environment: env.nodeEnv,
       port: env.port,
       adminBaseUrl: env.adminBaseUrl,
+      razorpayWebhookSecret: webhookSecretLoaded,
     },
     `Starting Customer Backend in ${env.nodeEnv.toUpperCase()} mode`
   );
