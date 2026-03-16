@@ -56,7 +56,12 @@ const inspectionRequestSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['PENDING_PAYMENT', 'PAID', 'FORWARDED', 'FAILED'],
+      enum: [
+        'PENDING_PAYMENT', 'PAID', 'FORWARDED',
+        'CANCELLATION_REQUESTED', 'CANCELLED',
+        'RESCHEDULE_REQUESTED', 'RESCHEDULED',
+        'FAILED',
+      ],
       default: 'PENDING_PAYMENT',
     },
 
@@ -79,6 +84,34 @@ const inspectionRequestSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+
+    cancellation: {
+      reason: { type: String, default: '' },
+      requestedAt: { type: Date, default: null },
+      confirmedAt: { type: Date, default: null },
+    },
+
+    reschedule: {
+      reason: { type: String, default: '' },
+      originalSchedule: {
+        date: { type: Date, default: null },
+        slot: { type: String, default: '' },
+      },
+      requestedSchedule: {
+        date: { type: Date, default: null },
+        slot: { type: String, default: '' },
+      },
+      requestedAt: { type: Date, default: null },
+      confirmedAt: { type: Date, default: null },
+    },
+
+    statusHistory: [{
+      from: { type: String },
+      to: { type: String },
+      changedAt: { type: Date, default: Date.now },
+      changedBy: { type: String, enum: ['CUSTOMER', 'ADMIN', 'SYSTEM'], default: 'SYSTEM' },
+      note: { type: String, default: '' },
+    }],
   },
   { timestamps: true }
 );

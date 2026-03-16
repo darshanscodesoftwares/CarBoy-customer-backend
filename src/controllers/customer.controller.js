@@ -1,4 +1,4 @@
-import { submitInspectionRequest, getInspectionRequests, getInspectionRequestById } from '../services/customer.service.js';
+import { submitInspectionRequest, getInspectionRequests, getInspectionRequestById, requestCancellation, requestReschedule } from '../services/customer.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
 
@@ -50,5 +50,58 @@ export async function getInspectionRequestDetail(req, res) {
     const message = error.message || 'Unable to fetch inspection request';
 
     return errorResponse(res, message, statusCode);
+  }
+}
+
+export async function cancelInspectionRequest(req, res) {
+  try {
+    const { requestId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return errorResponse(res, 'Cancellation reason is required', 400);
+    }
+
+    const trimmedReason = reason.trim().slice(0, 500);
+    const result = await requestCancellation(requestId, req.userId, trimmedReason);
+
+    return successResponse(res, result, 'Cancellation request submitted. Awaiting admin approval.');
+  } catch (error) {
+    logger.error(
+      { event: 'cancel_inspection_request_failed', requestId: req.params.requestId, error: error.message },
+      'Cancel inspection request failed'
+    );
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function rescheduleInspectionRequest(req, res) {
+  try {
+    const { requestId } = req.params;
+    const { schedule, reason } = req.body;
+
+    if (!schedule?.date || !schedule?.slot) {
+      return errorResponse(res, 'Schedule date and slot are required', 400);
+    }
+
+    const scheduleDate = new Date(schedule.date);
+    if (isNaN(scheduleDate.getTime()) || scheduleDate <= new Date()) {
+      return errorResponse(res, 'Schedule date must be a valid future date', 400);
+    }
+
+    const trimmedReason = (reason || '').trim().slice(0, 500);
+
+    const result = await requestReschedule(requestId, req.userId, {
+      date: scheduleDate,
+      slot: schedule.slot.trim(),
+    }, trimmedReason);
+
+    return successResponse(res, result, 'Reschedule request submitted. We\'ll notify you soon.');
+  } catch (error) {
+    logger.error(
+      { event: 'reschedule_inspection_request_failed', requestId: req.params.requestId, error: error.message },
+      'Reschedule inspection request failed'
+    );
+    return errorResponse(res, error.message, error.statusCode || 500);
   }
 }

@@ -1,6 +1,6 @@
 import InspectionRequest from '../models/InspectionRequest.js';
 import { getBrands, getModelsByBrand } from './vehicleMaster.service.js';
-import { createAdminJob } from '../integrations/adminClient.js';
+import { createAdminJob, notifyAdminCancellation, notifyAdminReschedule } from '../integrations/adminClient.js';
 import logger from '../utils/logger.js';
 import { AppError } from '../utils/errors.js';
 
@@ -136,14 +136,19 @@ export async function getInspectionRequests(userId) {
   const filter = userId ? { userId } : {};
   const requests = await InspectionRequest.find(filter)
     .sort({ createdAt: -1 })
-    .select('requestNumber serviceType status schedule.date createdAt');
+    .select('requestNumber serviceType status schedule vehicleSnapshot location createdAt cancellation reschedule');
 
   return requests.map((item) => ({
     requestId: item.requestNumber,
     serviceType: item.serviceType,
     status: item.status,
-    scheduledDate: item.schedule.date,
+    schedule: item.schedule || null,
+    scheduledDate: item.schedule?.date,
+    vehicleSnapshot: item.vehicleSnapshot || null,
+    location: item.location || null,
     createdAt: item.createdAt,
+    cancellation: item.cancellation || null,
+    reschedule: item.reschedule || null,
   }));
 }
 
@@ -178,6 +183,9 @@ export async function getInspectionRequestById(requestId) {
       payment: inspectionRequest.payment,
       customerNotes: inspectionRequest.customerNotes,
       adminJobId: inspectionRequest.adminJobId,
+      cancellation: inspectionRequest.cancellation || null,
+      reschedule: inspectionRequest.reschedule || null,
+      statusHistory: inspectionRequest.statusHistory || [],
       createdAt: inspectionRequest.createdAt,
       updatedAt: inspectionRequest.updatedAt,
     };
@@ -253,4 +261,188 @@ async function enrichVehicleSnapshotWithPrice(vehicleSnapshot) {
     // Return vehicleSnapshot with null price on error instead of throwing
     return { ...vehicleSnapshot, price: null };
   }
+}
+
+const CANCELLABLE_STATUSES = ['FORWARDED', 'RESCHEDULED', 'PAID'];
+const RESCHEDULABLE_STATUSES = ['FORWARDED', 'PAID'];
+
+export async function requestCancellation(requestNumber, userId, reason) {
+  const request = await InspectionRequest.findOneAndUpdate(
+    { requestNumber, userId, status: { $in: CANCELLABLE_STATUSES } },
+    {
+      $set: {
+        status: 'CANCELLATION_REQUESTED',
+        'cancellation.reason': reason,
+        'cancellation.requestedAt': new Date(),
+      },
+      $push: {
+        statusHistory: {
+          from: undefined, // will be set below
+          to: 'CANCELLATION_REQUESTED',
+          changedAt: new Date(),
+          changedBy: 'CUSTOMER',
+          note: reason,
+        },
+      },
+    },
+    { new: false } // return old doc to get previous status
+  );
+
+  if (!request) {
+    const exists = await InspectionRequest.findOne({ requestNumber, userId });
+    if (!exists) throw new AppError('Inspection request not found', 404);
+    throw new AppError(`Cannot cancel a request with status: ${exists.status}`, 400);
+  }
+
+  // Fix statusHistory.from with actual previous status
+  await InspectionRequest.updateOne(
+    { requestNumber, 'statusHistory.from': null },
+    { $set: { 'statusHistory.$.from': request.status } }
+  );
+
+  // Fire-and-forget admin notification
+  notifyAdminCancellation({
+    requestNumber,
+    reason,
+    customerSnapshot: request.customerSnapshot,
+    requestedAt: new Date(),
+  }).catch((err) => {
+    logger.warn({ event: 'admin_cancel_notify_failed_silent', requestNumber, error: err.message }, 'Admin cancel notification failed (non-blocking)');
+  });
+
+  const updated = await InspectionRequest.findOne({ requestNumber });
+  logger.info({ event: 'cancellation_requested', requestNumber }, 'Cancellation requested');
+
+  return {
+    requestId: updated.requestNumber,
+    status: updated.status,
+    cancellation: updated.cancellation,
+  };
+}
+
+export async function requestReschedule(requestNumber, userId, newSchedule, reason) {
+  const request = await InspectionRequest.findOneAndUpdate(
+    { requestNumber, userId, status: { $in: RESCHEDULABLE_STATUSES } },
+    {
+      $set: {
+        status: 'RESCHEDULE_REQUESTED',
+        'reschedule.reason': reason || '',
+        'reschedule.originalSchedule': undefined, // set below
+        'reschedule.requestedSchedule': newSchedule,
+        'reschedule.requestedAt': new Date(),
+      },
+      $push: {
+        statusHistory: {
+          from: undefined,
+          to: 'RESCHEDULE_REQUESTED',
+          changedAt: new Date(),
+          changedBy: 'CUSTOMER',
+          note: reason || `Reschedule to ${newSchedule.date} ${newSchedule.slot}`,
+        },
+      },
+    },
+    { new: false }
+  );
+
+  if (!request) {
+    const exists = await InspectionRequest.findOne({ requestNumber, userId });
+    if (!exists) throw new AppError('Inspection request not found', 404);
+    throw new AppError(`Cannot reschedule a request with status: ${exists.status}`, 400);
+  }
+
+  // Set originalSchedule and fix statusHistory.from
+  await InspectionRequest.updateOne(
+    { requestNumber },
+    {
+      $set: {
+        'reschedule.originalSchedule': request.schedule,
+      },
+    }
+  );
+  await InspectionRequest.updateOne(
+    { requestNumber, 'statusHistory.from': null },
+    { $set: { 'statusHistory.$.from': request.status } }
+  );
+
+  // Fire-and-forget admin notification
+  notifyAdminReschedule({
+    requestNumber,
+    reason: reason || '',
+    originalSchedule: request.schedule,
+    requestedSchedule: newSchedule,
+    customerSnapshot: request.customerSnapshot,
+    requestedAt: new Date(),
+  }).catch((err) => {
+    logger.warn({ event: 'admin_reschedule_notify_failed_silent', requestNumber, error: err.message }, 'Admin reschedule notification failed (non-blocking)');
+  });
+
+  const updated = await InspectionRequest.findOne({ requestNumber });
+  logger.info({ event: 'reschedule_requested', requestNumber }, 'Reschedule requested');
+
+  return {
+    requestId: updated.requestNumber,
+    status: updated.status,
+    reschedule: updated.reschedule,
+  };
+}
+
+export async function confirmCancellation(requestNumber, adminNote) {
+  const request = await InspectionRequest.findOneAndUpdate(
+    { requestNumber, status: 'CANCELLATION_REQUESTED' },
+    {
+      $set: {
+        status: 'CANCELLED',
+        'cancellation.confirmedAt': new Date(),
+      },
+      $push: {
+        statusHistory: {
+          from: 'CANCELLATION_REQUESTED',
+          to: 'CANCELLED',
+          changedAt: new Date(),
+          changedBy: 'ADMIN',
+          note: adminNote || 'Cancellation approved by admin',
+        },
+      },
+    },
+    { new: true }
+  );
+
+  if (!request) {
+    throw new AppError('Request not found or not in CANCELLATION_REQUESTED status', 404);
+  }
+
+  logger.info({ event: 'cancellation_confirmed', requestNumber }, 'Cancellation confirmed by admin');
+  return request;
+}
+
+export async function confirmReschedule(requestNumber, adminNote) {
+  const request = await InspectionRequest.findOne({ requestNumber, status: 'RESCHEDULE_REQUESTED' });
+
+  if (!request) {
+    throw new AppError('Request not found or not in RESCHEDULE_REQUESTED status', 404);
+  }
+
+  const updated = await InspectionRequest.findOneAndUpdate(
+    { requestNumber, status: 'RESCHEDULE_REQUESTED' },
+    {
+      $set: {
+        status: 'RESCHEDULED',
+        schedule: request.reschedule.requestedSchedule,
+        'reschedule.confirmedAt': new Date(),
+      },
+      $push: {
+        statusHistory: {
+          from: 'RESCHEDULE_REQUESTED',
+          to: 'RESCHEDULED',
+          changedAt: new Date(),
+          changedBy: 'ADMIN',
+          note: adminNote || 'Reschedule approved by admin',
+        },
+      },
+    },
+    { new: true }
+  );
+
+  logger.info({ event: 'reschedule_confirmed', requestNumber }, 'Reschedule confirmed by admin');
+  return updated;
 }
