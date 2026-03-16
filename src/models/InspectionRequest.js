@@ -60,7 +60,7 @@ const inspectionRequestSchema = new mongoose.Schema(
         'PENDING_PAYMENT', 'PAID', 'FORWARDED',
         'CANCELLATION_REQUESTED', 'CANCELLED',
         'RESCHEDULE_REQUESTED', 'RESCHEDULED',
-        'FAILED',
+        'ASSIGNMENT_FAILED', 'REFUNDED', 'FAILED',
       ],
       default: 'PENDING_PAYMENT',
     },
@@ -68,7 +68,7 @@ const inspectionRequestSchema = new mongoose.Schema(
     payment: {
       status: {
         type: String,
-        enum: ['NOT_REQUIRED', 'PENDING', 'PAID', 'FAILED'],
+        enum: ['NOT_REQUIRED', 'PENDING', 'PAID', 'FAILED', 'REFUNDED'],
         default: 'NOT_REQUIRED',
       },
       amount: Number,
@@ -103,6 +103,20 @@ const inspectionRequestSchema = new mongoose.Schema(
       },
       requestedAt: { type: Date, default: null },
       confirmedAt: { type: Date, default: null },
+    },
+
+    assignmentFailure: {
+      reason: { type: String, default: '' },
+      failedAt: { type: Date, default: null },
+    },
+
+    refund: {
+      razorpayRefundId: { type: String, default: '' },
+      amount: { type: Number, default: null },
+      cancellationFee: { type: Number, default: 0 },
+      cancellationFeePercent: { type: Number, default: 0 },
+      isLateCancellation: { type: Boolean, default: false },
+      processedAt: { type: Date, default: null },
     },
 
     statusHistory: [{

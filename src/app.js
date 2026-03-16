@@ -6,6 +6,7 @@ import vehicleMasterRoutes from './routes/vehicleMaster.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import { getCancellationPolicy } from './integrations/adminClient.js';
 import { env } from './config/env.js';
 import logger from './utils/logger.js';
 
@@ -71,10 +72,28 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Public endpoint — no auth needed, proxies cancellation policy from admin
+app.get('/api/customer/settings/cancellation-policy', async (req, res) => {
+  try {
+    const policy = await getCancellationPolicy();
+    res.json({ success: true, data: policy });
+  } catch (error) {
+    logger.error({ event: 'cancellation_policy_fetch_failed', error: error.message }, 'Failed to fetch cancellation policy');
+    // Return sensible defaults if admin is unreachable
+    res.json({
+      success: true,
+      data: { cutoffHours: 1, feePercent: 20 },
+      fallback: true,
+    });
+  }
+});
+
 app.use('/api/customer/auth', authRoutes);
 app.use('/api/customer/vehicle-master', vehicleMasterRoutes);
 app.use('/api/customer/payments', paymentRoutes);
-app.use('/api/customer/admin', adminRoutes);
+// Admin callback routes — service-to-service, no JWT auth
+// Admin BE calls: /api/customer/inspection-requests/:requestNumber/confirm-cancellation, etc.
+app.use('/api/customer/inspection-requests', adminRoutes);
 app.use('/api/customer', customerRoutes);
 
 export default app;

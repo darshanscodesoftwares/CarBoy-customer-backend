@@ -1,4 +1,4 @@
-import { confirmCancellation, confirmReschedule } from '../services/customer.service.js';
+import { confirmCancellation, confirmReschedule, handleAssignmentFailed, handleRefundConfirmation } from '../services/customer.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
 
@@ -40,6 +40,56 @@ export async function adminRescheduleConfirmed(req, res) {
     logger.error(
       { event: 'admin_reschedule_confirmed_failed', requestNumber: req.params.requestNumber, error: error.message },
       'Admin reschedule confirmation failed'
+    );
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function adminAssignmentFailed(req, res) {
+  try {
+    const { requestNumber } = req.params;
+
+    const result = await handleAssignmentFailed(requestNumber);
+
+    return successResponse(res, {
+      requestId: result.requestNumber,
+      status: result.status,
+      assignmentFailure: result.assignmentFailure,
+    }, 'Assignment failure recorded');
+  } catch (error) {
+    logger.error(
+      { event: 'admin_assignment_failed_handler_error', requestNumber: req.params.requestNumber, error: error.message },
+      'Assignment failed handler error'
+    );
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function adminRefundConfirmed(req, res) {
+  try {
+    const { requestNumber } = req.params;
+    const { razorpayRefundId, amount, processedAt } = req.body;
+
+    if (!razorpayRefundId || !amount) {
+      return errorResponse(res, 'razorpayRefundId and amount are required', 400);
+    }
+
+    const result = await handleRefundConfirmation(requestNumber, {
+      razorpayRefundId,
+      amount,
+      processedAt: processedAt || new Date(),
+    });
+
+    return successResponse(res, {
+      requestId: result.requestNumber,
+      status: result.status,
+      payment: result.payment,
+      refund: result.refund,
+    }, 'Refund confirmed');
+  } catch (error) {
+    logger.error(
+      { event: 'admin_refund_confirmed_failed', requestNumber: req.params.requestNumber, error: error.message },
+      'Admin refund confirmation failed'
     );
     return errorResponse(res, error.message, error.statusCode || 500);
   }

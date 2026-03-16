@@ -1,12 +1,12 @@
 import express from 'express';
-import { adminCancelConfirmed, adminRescheduleConfirmed } from '../controllers/admin.controller.js';
-import { authenticateAdmin } from '../middlewares/adminAuth.js';
+import { adminCancelConfirmed, adminRescheduleConfirmed, adminAssignmentFailed, adminRefundConfirmed } from '../controllers/admin.controller.js';
 
 const router = express.Router();
 
-router.use(authenticateAdmin);
-
-router.post('/inspection-requests/:requestNumber/cancel-confirmed', adminCancelConfirmed);
-router.post('/inspection-requests/:requestNumber/reschedule-confirmed', adminRescheduleConfirmed);
+// These are internal service-to-service callbacks from admin backend — no JWT auth
+router.post('/:requestNumber/confirm-cancellation', adminCancelConfirmed);
+router.post('/:requestNumber/confirm-reschedule', adminRescheduleConfirmed);
+router.post('/:requestNumber/assignment-failed', adminAssignmentFailed);
+router.post('/:requestNumber/confirm-refund', adminRefundConfirmed);
 
 export default router;

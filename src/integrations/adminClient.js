@@ -37,6 +37,23 @@ export async function notifyAdminReschedule(payload) {
   }
 }
 
+export async function getCancellationPolicy() {
+  const url = `${env.adminBaseUrl}/settings/cancellation-policy`;
+
+  try {
+    const response = await axios.get(url, {
+      timeout: env.adminTimeoutMs,
+    });
+
+    logger.info({ event: 'fetch_cancellation_policy_success' }, 'Cancellation policy fetched from admin');
+    return response.data?.data || response.data;
+  } catch (error) {
+    const message = error.response?.data?.message || error.message || 'Failed to fetch cancellation policy';
+    logger.error({ event: 'fetch_cancellation_policy_failed', error: message }, 'Failed to fetch cancellation policy');
+    throw new AppError(`Failed to fetch cancellation policy: ${message}`, error.response?.status || 502);
+  }
+}
+
 export async function createAdminJob(jobPayload) {
   const url = `${env.adminBaseUrl}/inspection-requests`;
 

@@ -136,7 +136,7 @@ export async function getInspectionRequests(userId) {
   const filter = userId ? { userId } : {};
   const requests = await InspectionRequest.find(filter)
     .sort({ createdAt: -1 })
-    .select('requestNumber serviceType status schedule vehicleSnapshot location createdAt cancellation reschedule');
+    .select('requestNumber serviceType status schedule vehicleSnapshot location createdAt cancellation reschedule assignmentFailure refund payment');
 
   return requests.map((item) => ({
     requestId: item.requestNumber,
@@ -149,6 +149,9 @@ export async function getInspectionRequests(userId) {
     createdAt: item.createdAt,
     cancellation: item.cancellation || null,
     reschedule: item.reschedule || null,
+    assignmentFailure: item.assignmentFailure || null,
+    refund: item.refund || null,
+    payment: item.payment || null,
   }));
 }
 
@@ -185,6 +188,8 @@ export async function getInspectionRequestById(requestId) {
       adminJobId: inspectionRequest.adminJobId,
       cancellation: inspectionRequest.cancellation || null,
       reschedule: inspectionRequest.reschedule || null,
+      assignmentFailure: inspectionRequest.assignmentFailure || null,
+      refund: inspectionRequest.refund || null,
       statusHistory: inspectionRequest.statusHistory || [],
       createdAt: inspectionRequest.createdAt,
       updatedAt: inspectionRequest.updatedAt,
@@ -444,5 +449,83 @@ export async function confirmReschedule(requestNumber, adminNote) {
   );
 
   logger.info({ event: 'reschedule_confirmed', requestNumber }, 'Reschedule confirmed by admin');
+  return updated;
+}
+
+export async function handleAssignmentFailed(requestNumber) {
+  const request = await InspectionRequest.findOneAndUpdate(
+    { requestNumber, status: { $nin: ['CANCELLED', 'REFUNDED', 'ASSIGNMENT_FAILED'] } },
+    {
+      $set: {
+        status: 'ASSIGNMENT_FAILED',
+        'assignmentFailure.reason': 'No expert was assigned within the required time',
+        'assignmentFailure.failedAt': new Date(),
+      },
+      $push: {
+        statusHistory: {
+          from: undefined,
+          to: 'ASSIGNMENT_FAILED',
+          changedAt: new Date(),
+          changedBy: 'ADMIN',
+          note: 'No expert was assigned within the required time',
+        },
+      },
+    },
+    { new: false }
+  );
+
+  if (!request) {
+    throw new AppError('Request not found or already in a terminal status', 404);
+  }
+
+  // Fix statusHistory.from
+  await InspectionRequest.updateOne(
+    { requestNumber, 'statusHistory.from': null },
+    { $set: { 'statusHistory.$.from': request.status } }
+  );
+
+  const updated = await InspectionRequest.findOne({ requestNumber });
+  logger.info({ event: 'assignment_failed', requestNumber }, 'Assignment failed — no expert assigned');
+  return updated;
+}
+
+export async function handleRefundConfirmation(requestNumber, refundData) {
+  const request = await InspectionRequest.findOneAndUpdate(
+    { requestNumber },
+    {
+      $set: {
+        'payment.status': 'REFUNDED',
+        'refund.razorpayRefundId': refundData.razorpayRefundId,
+        'refund.amount': refundData.amount,
+        'refund.cancellationFee': refundData.cancellationFee ?? 0,
+        'refund.cancellationFeePercent': refundData.cancellationFeePercent ?? 0,
+        'refund.isLateCancellation': refundData.isLateCancellation ?? false,
+        'refund.processedAt': refundData.processedAt || new Date(),
+      },
+      $push: {
+        statusHistory: {
+          from: undefined,
+          to: 'REFUNDED',
+          changedAt: new Date(),
+          changedBy: 'ADMIN',
+          note: `Refund of ₹${refundData.amount} processed${refundData.cancellationFee ? ` (₹${refundData.cancellationFee} fee deducted)` : ''}`,
+        },
+      },
+    },
+    { new: false }
+  );
+
+  if (!request) {
+    throw new AppError('Inspection request not found', 404);
+  }
+
+  // Fix statusHistory.from
+  await InspectionRequest.updateOne(
+    { requestNumber, 'statusHistory.from': null },
+    { $set: { 'statusHistory.$.from': request.status } }
+  );
+
+  const updated = await InspectionRequest.findOne({ requestNumber });
+  logger.info({ event: 'refund_confirmed', requestNumber, amount: refundData.amount }, 'Refund confirmed');
   return updated;
 }
