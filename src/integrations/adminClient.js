@@ -54,6 +54,23 @@ export async function getCancellationPolicy() {
   }
 }
 
+export async function forwardEnquiry(payload) {
+  const url = `${env.adminBaseUrl}/enquiries`;
+
+  try {
+    const response = await axios.post(url, payload, {
+      timeout: env.adminTimeoutMs,
+    });
+
+    logger.info({ event: 'enquiry_forwarded_success' }, 'Enquiry forwarded to admin');
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.message || error.message || 'Failed to forward enquiry';
+    logger.error({ event: 'enquiry_forward_failed', error: message }, 'Enquiry forward to admin failed');
+    throw new AppError(`Failed to forward enquiry: ${message}`, error.response?.status || 502);
+  }
+}
+
 export async function createAdminJob(jobPayload) {
   const url = `${env.adminBaseUrl}/inspection-requests`;
 

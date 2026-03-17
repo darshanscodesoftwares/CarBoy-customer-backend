@@ -6,7 +6,7 @@ import vehicleMasterRoutes from './routes/vehicleMaster.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import adminRoutes from './routes/admin.routes.js';
-import { getCancellationPolicy } from './integrations/adminClient.js';
+import { getCancellationPolicy, forwardEnquiry } from './integrations/adminClient.js';
 import { env } from './config/env.js';
 import logger from './utils/logger.js';
 
@@ -85,6 +85,28 @@ app.get('/api/customer/settings/cancellation-policy', async (req, res) => {
       data: { cutoffHours: 1, feePercent: 20 },
       fallback: true,
     });
+  }
+});
+
+// Public — no auth, user may not be logged in when enquiring
+app.post('/api/customer/enquiry', async (req, res) => {
+  try {
+    logger.info({ event: 'enquiry_received', body: req.body }, 'Enquiry payload received');
+    const fullName = (req.body.fullName || req.body.name || '').trim();
+    const phoneNumber = (req.body.phoneNumber || req.body.phone || '').trim();
+    const address = (req.body.address || '').trim();
+    const message = (req.body.message || '').trim();
+
+    if (!fullName || !phoneNumber || !address) {
+      return res.status(400).json({ success: false, message: 'Full name, phone number, and address are required' });
+    }
+
+    await forwardEnquiry({ fullName, phoneNumber, address, message });
+
+    return res.json({ success: true, message: 'Enquiry submitted successfully' });
+  } catch (error) {
+    logger.error({ event: 'enquiry_submit_failed', error: error.message }, 'Enquiry submission failed');
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 });
 
