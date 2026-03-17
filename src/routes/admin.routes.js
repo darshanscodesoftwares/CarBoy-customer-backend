@@ -1,5 +1,5 @@
 import express from 'express';
-import { adminCancelConfirmed, adminRescheduleConfirmed, adminAssignmentFailed, adminRefundConfirmed } from '../controllers/admin.controller.js';
+import { adminCancelConfirmed, adminRescheduleConfirmed, adminAssignmentFailed, adminRefundConfirmed, adminPaymentLinkCreated } from '../controllers/admin.controller.js';
 
 const router = express.Router();
 
@@ -8,5 +8,6 @@ router.post('/:requestNumber/confirm-cancellation', adminCancelConfirmed);
 router.post('/:requestNumber/confirm-reschedule', adminRescheduleConfirmed);
 router.post('/:requestNumber/assignment-failed', adminAssignmentFailed);
 router.post('/:requestNumber/confirm-refund', adminRefundConfirmed);
+router.post('/:requestNumber/payment-link', adminPaymentLinkCreated);
 
 export default router;

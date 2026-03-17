@@ -1,4 +1,5 @@
 import { confirmCancellation, confirmReschedule, handleAssignmentFailed, handleRefundConfirmation } from '../services/customer.service.js';
+import { storePaymentLinkDetails } from '../services/payment.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
 
@@ -90,6 +91,30 @@ export async function adminRefundConfirmed(req, res) {
     logger.error(
       { event: 'admin_refund_confirmed_failed', requestNumber: req.params.requestNumber, error: error.message },
       'Admin refund confirmation failed'
+    );
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function adminPaymentLinkCreated(req, res) {
+  try {
+    const { requestNumber } = req.params;
+    const { paymentLinkId, paymentLinkUrl } = req.body;
+
+    if (!paymentLinkId || !paymentLinkUrl) {
+      return errorResponse(res, 'paymentLinkId and paymentLinkUrl are required', 400);
+    }
+
+    const result = await storePaymentLinkDetails(requestNumber, paymentLinkId, paymentLinkUrl);
+
+    return successResponse(res, {
+      requestId: result.requestNumber,
+      payment: result.payment,
+    }, 'Payment link stored');
+  } catch (error) {
+    logger.error(
+      { event: 'admin_payment_link_failed', requestNumber: req.params.requestNumber, error: error.message },
+      'Failed to store payment link'
     );
     return errorResponse(res, error.message, error.statusCode || 500);
   }

@@ -117,7 +117,12 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
     });
 
     if (!inspectionRequest) {
-      throw new AppError('Inspection request not found for this order', 404);
+      // Could be a payment link payment — no order associated, handle gracefully
+      logger.warn(
+        { event: 'no_request_for_order', razorpayOrderId },
+        'No inspection request found for this order ID (may be a payment link payment)'
+      );
+      return null;
     }
 
     // Idempotency: if request already forwarded, skip processing
@@ -134,37 +139,46 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
       return inspectionRequest;
     }
 
+    const isPartial = inspectionRequest.payment.type === 'PARTIAL';
     let paidRequest = inspectionRequest;
 
-    // Update payment details and request status to PAID
-    if (inspectionRequest.payment.status !== 'PAID' || inspectionRequest.status !== 'PAID') {
+    if (isPartial) {
+      // PARTIAL: mark as PARTIALLY_PAID, set paidAmount
+      const paidAmount = inspectionRequest.payment.amount - inspectionRequest.payment.remainingAmount;
       paidRequest = await InspectionRequest.findByIdAndUpdate(
         inspectionRequest._id,
         {
-          status: 'PAID',
-          'payment.status': 'PAID',
+          status: 'PARTIALLY_PAID',
+          'payment.status': 'PARTIALLY_PAID',
           'payment.razorpayPaymentId': razorpayPaymentId,
           'payment.paidAt': new Date(),
+          'payment.paidAmount': paidAmount,
         },
         { new: true }
       );
     } else {
-      logger.info(
-        {
-          event: 'payment_already_marked_paid',
-          razorpayOrderId,
-          requestNumber: inspectionRequest.requestNumber,
-        },
-        'Payment and request status already marked as PAID, attempting admin forwarding'
-      );
+      // FULL: mark as PAID (existing behavior)
+      if (inspectionRequest.payment.status !== 'PAID' || inspectionRequest.status !== 'PAID') {
+        paidRequest = await InspectionRequest.findByIdAndUpdate(
+          inspectionRequest._id,
+          {
+            status: 'PAID',
+            'payment.status': 'PAID',
+            'payment.razorpayPaymentId': razorpayPaymentId,
+            'payment.paidAt': new Date(),
+            'payment.paidAmount': inspectionRequest.payment.amount,
+            'payment.remainingAmount': 0,
+          },
+          { new: true }
+        );
+      }
     }
 
     if (!paidRequest) {
       throw new AppError('Failed to update inspection request after payment', 500);
     }
 
-    // Forward to admin ONLY after payment is confirmed (status = PAID)
-    // Admin payload will include status: 'PAID' so admin can assign technician
+    // Forward to admin after payment (PAID or PARTIALLY_PAID)
     const adminResponse = await forwardInspectionRequestToAdmin(paidRequest);
 
     let finalRequest = paidRequest;
@@ -186,6 +200,7 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
         event: 'payment_marked_successful',
         razorpayOrderId,
         razorpayPaymentId,
+        paymentType: inspectionRequest.payment.type,
         requestNumber: inspectionRequest.requestNumber,
       },
       'Payment marked as successful'
@@ -205,4 +220,100 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
 
     throw error;
   }
+}
+
+/**
+ * Mark remaining payment as successful (from Razorpay Payment Link)
+ * @param {string} paymentLinkId - Razorpay payment link ID
+ * @param {string} razorpayPaymentId - Razorpay payment ID
+ * @returns {Promise<Object>} Updated inspection request
+ */
+export async function markRemainingPaymentSuccessful(paymentLinkId, razorpayPaymentId) {
+  try {
+    if (!paymentLinkId) {
+      throw new AppError('Invalid payment link ID', 400);
+    }
+
+    const inspectionRequest = await InspectionRequest.findOne({
+      'payment.razorpayPaymentLinkId': paymentLinkId,
+    });
+
+    if (!inspectionRequest) {
+      logger.warn(
+        { event: 'no_request_for_payment_link', paymentLinkId },
+        'No inspection request found for this payment link'
+      );
+      return null;
+    }
+
+    // Idempotency: skip if already fully paid
+    if (inspectionRequest.payment.status === 'PAID') {
+      logger.info(
+        { event: 'remaining_payment_already_paid', paymentLinkId, requestNumber: inspectionRequest.requestNumber },
+        'Remaining payment already marked as paid'
+      );
+      return inspectionRequest;
+    }
+
+    const updated = await InspectionRequest.findByIdAndUpdate(
+      inspectionRequest._id,
+      {
+        'payment.status': 'PAID',
+        'payment.paidAmount': inspectionRequest.payment.amount,
+        'payment.remainingAmount': 0,
+        'payment.remainingRazorpayPaymentId': razorpayPaymentId,
+        'payment.remainingPaidAt': new Date(),
+      },
+      { new: true }
+    );
+
+    logger.info(
+      {
+        event: 'remaining_payment_successful',
+        paymentLinkId,
+        razorpayPaymentId,
+        requestNumber: inspectionRequest.requestNumber,
+      },
+      'Remaining payment marked as successful'
+    );
+
+    return updated;
+  } catch (error) {
+    logger.error(
+      { event: 'mark_remaining_payment_failed', paymentLinkId, error: error.message },
+      'Failed to mark remaining payment as successful'
+    );
+    throw error;
+  }
+}
+
+/**
+ * Store Razorpay payment link details (called by admin backend)
+ * @param {string} requestNumber - Inspection request number
+ * @param {string} paymentLinkId - Razorpay payment link ID
+ * @param {string} paymentLinkUrl - Razorpay payment link URL
+ * @returns {Promise<Object>} Updated inspection request
+ */
+export async function storePaymentLinkDetails(requestNumber, paymentLinkId, paymentLinkUrl) {
+  const request = await InspectionRequest.findOneAndUpdate(
+    { requestNumber, 'payment.type': 'PARTIAL' },
+    {
+      $set: {
+        'payment.razorpayPaymentLinkId': paymentLinkId,
+        'payment.razorpayPaymentLinkUrl': paymentLinkUrl,
+      },
+    },
+    { new: true }
+  );
+
+  if (!request) {
+    throw new AppError('Request not found or not a partial payment', 404);
+  }
+
+  logger.info(
+    { event: 'payment_link_stored', requestNumber, paymentLinkId },
+    'Payment link details stored'
+  );
+
+  return request;
 }

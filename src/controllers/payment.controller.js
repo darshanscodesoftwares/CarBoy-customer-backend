@@ -1,5 +1,5 @@
 import InspectionRequest from '../models/InspectionRequest.js';
-import { createRazorpayOrder, verifyWebhookSignature, markPaymentSuccessful } from '../services/payment.service.js';
+import { createRazorpayOrder, verifyWebhookSignature, markPaymentSuccessful, markRemainingPaymentSuccessful } from '../services/payment.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import { env } from '../config/env.js';
 import { getWebhookUrl } from '../config/app.config.js';
@@ -14,10 +14,14 @@ import logger from '../utils/logger.js';
  */
 export async function createPaymentOrder(req, res) {
   try {
-    const { requestNumber } = req.body;
+    const { requestNumber, paymentType = 'FULL' } = req.body;
 
     if (!requestNumber) {
       return errorResponse(res, 'Request number is required', 400);
+    }
+
+    if (!['FULL', 'PARTIAL'].includes(paymentType)) {
+      return errorResponse(res, 'paymentType must be FULL or PARTIAL', 400);
     }
 
     // Fetch inspection request
@@ -29,27 +33,38 @@ export async function createPaymentOrder(req, res) {
       return errorResponse(res, 'Inspection request not found', 404);
     }
 
-    // Check if already paid
+    // Check if already paid or partially paid
     if (inspectionRequest.payment.status === 'PAID') {
       return errorResponse(res, 'Payment already completed for this request', 400);
     }
+    if (inspectionRequest.payment.status === 'PARTIALLY_PAID') {
+      return errorResponse(res, 'Initial payment already completed. Awaiting remaining payment.', 400);
+    }
 
     // Check if request has a valid price
-    const amount = inspectionRequest.vehicleSnapshot?.price;
-    if (!amount || amount <= 0) {
+    const totalAmount = inspectionRequest.vehicleSnapshot?.price;
+    if (!totalAmount || totalAmount <= 0) {
       logger.warn(
         {
           event: 'invalid_payment_amount',
           requestNumber,
-          amount,
+          amount: totalAmount,
         },
         'Cannot create payment order without valid vehicle price'
       );
       return errorResponse(res, 'Vehicle price not available for this request', 400);
     }
 
-    // Convert amount to paise (smallest currency unit)
-    const amountInPaise = Math.round(amount * 100);
+    // Calculate charge amount based on payment type
+    const chargeAmount = paymentType === 'PARTIAL'
+      ? Math.ceil(totalAmount / 2)
+      : totalAmount;
+    const remainingAmount = paymentType === 'PARTIAL'
+      ? totalAmount - chargeAmount
+      : 0;
+
+    // Convert charge amount to paise (smallest currency unit)
+    const amountInPaise = Math.round(chargeAmount * 100);
 
     // Create Razorpay order
     const razorpayOrder = await createRazorpayOrder({
@@ -62,8 +77,11 @@ export async function createPaymentOrder(req, res) {
       inspectionRequest._id,
       {
         'payment.status': 'PENDING',
+        'payment.type': paymentType,
         'payment.razorpayOrderId': razorpayOrder.id,
-        'payment.amount': amount,
+        'payment.amount': totalAmount,
+        'payment.paidAmount': 0,
+        'payment.remainingAmount': remainingAmount,
         'payment.currency': 'INR',
       },
       { new: true }
@@ -74,7 +92,10 @@ export async function createPaymentOrder(req, res) {
         event: 'payment_order_created_in_db',
         requestNumber,
         razorpayOrderId: razorpayOrder.id,
-        amount,
+        paymentType,
+        chargeAmount,
+        totalAmount,
+        remainingAmount,
         webhookUrl: getWebhookUrl('/api/customer/payments/webhook'),
       },
       'Payment order created and saved'
@@ -84,7 +105,10 @@ export async function createPaymentOrder(req, res) {
       res,
       {
         orderId: razorpayOrder.id,
-        amount,
+        amount: chargeAmount,
+        totalAmount,
+        paymentType,
+        remainingAmount,
         currency: 'INR',
         key: env.razorpayKeyId,
       },
@@ -225,6 +249,38 @@ export async function handlePaymentWebhook(req, res) {
         );
 
         // Still return 200 to prevent Razorpay retries for non-recoverable errors
+        return successResponse(res, {}, 'Webhook acknowledged', 200);
+      }
+    }
+
+    // Handle payment link paid event (remaining payment for partial)
+    if (event === 'payment_link.paid') {
+      const linkEntity = payload?.payment_link?.entity;
+
+      if (!linkEntity) {
+        logger.warn(
+          { event: 'webhook_invalid_payment_link_payload', eventType: event },
+          'Webhook payload missing payment_link entity'
+        );
+        return successResponse(res, {}, 'Webhook processed', 200);
+      }
+
+      const paymentLinkId = linkEntity.id;
+      const paymentId = linkEntity.payments?.[0]?.payment_id || payload?.payment?.entity?.id;
+
+      logger.info(
+        { event: 'webhook_processing_payment_link', paymentLinkId, paymentId },
+        'Processing payment link paid event'
+      );
+
+      try {
+        await markRemainingPaymentSuccessful(paymentLinkId, paymentId);
+        return successResponse(res, {}, 'Remaining payment processed successfully', 200);
+      } catch (updateError) {
+        logger.error(
+          { event: 'webhook_payment_link_update_failed', paymentLinkId, error: updateError.message },
+          'Failed to update remaining payment from webhook'
+        );
         return successResponse(res, {}, 'Webhook acknowledged', 200);
       }
     }

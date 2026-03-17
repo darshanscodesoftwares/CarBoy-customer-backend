@@ -85,14 +85,14 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
     return null;
   }
 
-  if (inspectionRequest.status !== 'PAID') {
+  if (inspectionRequest.status !== 'PAID' && inspectionRequest.status !== 'PARTIALLY_PAID') {
     logger.warn(
       {
         event: 'admin_forwarding_skipped_not_paid',
         requestNumber: inspectionRequest.requestNumber,
         status: inspectionRequest.status,
       },
-      'Skipping admin forwarding because request is not PAID'
+      'Skipping admin forwarding because request is not PAID or PARTIALLY_PAID'
     );
     return null;
   }
@@ -108,7 +108,7 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
   };
 
   const adminJobPayload = {
-    status: 'PAID',
+    status: inspectionRequest.status,
     serviceType: inspectionRequest.serviceType,
     customerSnapshot: customerSnapshotWithNotes,
     vehicleSnapshot: inspectionRequest.vehicleSnapshot,
@@ -116,6 +116,9 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
     location: inspectionRequest.location,
     customerNotes,
     requestNumber: inspectionRequest.requestNumber,
+    paymentType: inspectionRequest.payment?.type || 'FULL',
+    paidAmount: inspectionRequest.payment?.paidAmount || 0,
+    remainingAmount: inspectionRequest.payment?.remainingAmount || 0,
   };
 
   const adminResponse = await createAdminJob(adminJobPayload);
@@ -268,8 +271,8 @@ async function enrichVehicleSnapshotWithPrice(vehicleSnapshot) {
   }
 }
 
-const CANCELLABLE_STATUSES = ['FORWARDED', 'RESCHEDULED', 'PAID'];
-const RESCHEDULABLE_STATUSES = ['FORWARDED', 'PAID'];
+const CANCELLABLE_STATUSES = ['FORWARDED', 'RESCHEDULED', 'PAID', 'PARTIALLY_PAID'];
+const RESCHEDULABLE_STATUSES = ['FORWARDED', 'PAID', 'PARTIALLY_PAID'];
 
 export async function requestCancellation(requestNumber, userId, reason) {
   const request = await InspectionRequest.findOneAndUpdate(

@@ -57,7 +57,7 @@ const inspectionRequestSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
-        'PENDING_PAYMENT', 'PAID', 'FORWARDED',
+        'PENDING_PAYMENT', 'PARTIALLY_PAID', 'PAID', 'FORWARDED',
         'CANCELLATION_REQUESTED', 'CANCELLED',
         'RESCHEDULE_REQUESTED', 'RESCHEDULED',
         'ASSIGNMENT_FAILED', 'REFUNDED', 'FAILED',
@@ -68,7 +68,7 @@ const inspectionRequestSchema = new mongoose.Schema(
     payment: {
       status: {
         type: String,
-        enum: ['NOT_REQUIRED', 'PENDING', 'PAID', 'FAILED', 'REFUNDED'],
+        enum: ['NOT_REQUIRED', 'PENDING', 'PARTIALLY_PAID', 'PAID', 'FAILED', 'REFUNDED'],
         default: 'NOT_REQUIRED',
       },
       amount: Number,
@@ -78,6 +78,13 @@ const inspectionRequestSchema = new mongoose.Schema(
       paidAt: Date,
       provider: String,
       providerPaymentId: String,
+      type: { type: String, enum: ['FULL', 'PARTIAL'], default: 'FULL' },
+      paidAmount: { type: Number, default: 0 },
+      remainingAmount: { type: Number, default: 0 },
+      razorpayPaymentLinkId: { type: String, default: null },
+      razorpayPaymentLinkUrl: { type: String, default: null },
+      remainingRazorpayPaymentId: { type: String, default: null },
+      remainingPaidAt: { type: Date, default: null },
     },
 
     customerNotes: {
