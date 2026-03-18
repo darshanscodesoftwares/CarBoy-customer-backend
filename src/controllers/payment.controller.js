@@ -1,5 +1,6 @@
 import InspectionRequest from '../models/InspectionRequest.js';
 import { createRazorpayOrder, verifyWebhookSignature, markPaymentSuccessful, markRemainingPaymentSuccessful } from '../services/payment.service.js';
+import { validateCoupon } from '../integrations/adminClient.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import { env } from '../config/env.js';
 import { getWebhookUrl } from '../config/app.config.js';
@@ -14,7 +15,7 @@ import logger from '../utils/logger.js';
  */
 export async function createPaymentOrder(req, res) {
   try {
-    const { requestNumber, paymentType = 'FULL' } = req.body;
+    const { requestNumber, paymentType = 'FULL', couponCode } = req.body;
 
     if (!requestNumber) {
       return errorResponse(res, 'Request number is required', 400);
@@ -55,12 +56,31 @@ export async function createPaymentOrder(req, res) {
       return errorResponse(res, 'Vehicle price not available for this request', 400);
     }
 
+    // Validate and apply coupon if provided
+    let couponData = null;
+    let effectiveAmount = totalAmount;
+
+    if (couponCode) {
+      try {
+        const phone = inspectionRequest.customerSnapshot?.phone;
+        couponData = await validateCoupon(couponCode, phone, totalAmount);
+
+        if (!couponData?.valid) {
+          return errorResponse(res, 'Invalid coupon code', 400);
+        }
+
+        effectiveAmount = couponData.finalAmount;
+      } catch (error) {
+        return errorResponse(res, error.message, error.statusCode || 400);
+      }
+    }
+
     // Calculate charge amount based on payment type
     const chargeAmount = paymentType === 'PARTIAL'
-      ? Math.ceil(totalAmount / 2)
-      : totalAmount;
+      ? Math.ceil(effectiveAmount / 2)
+      : effectiveAmount;
     const remainingAmount = paymentType === 'PARTIAL'
-      ? totalAmount - chargeAmount
+      ? effectiveAmount - chargeAmount
       : 0;
 
     // Convert charge amount to paise (smallest currency unit)
@@ -73,17 +93,30 @@ export async function createPaymentOrder(req, res) {
     });
 
     // Save order details to inspection request
+    const updateFields = {
+      'payment.status': 'PENDING',
+      'payment.type': paymentType,
+      'payment.razorpayOrderId': razorpayOrder.id,
+      'payment.amount': effectiveAmount,
+      'payment.paidAmount': 0,
+      'payment.remainingAmount': remainingAmount,
+      'payment.currency': 'INR',
+    };
+
+    if (couponData) {
+      updateFields.appliedCoupon = {
+        code: couponCode,
+        discountType: couponData.discountType,
+        discountValue: couponData.discountValue,
+        discount: couponData.discount,
+        originalAmount: totalAmount,
+        finalAmount: couponData.finalAmount,
+      };
+    }
+
     await InspectionRequest.findByIdAndUpdate(
       inspectionRequest._id,
-      {
-        'payment.status': 'PENDING',
-        'payment.type': paymentType,
-        'payment.razorpayOrderId': razorpayOrder.id,
-        'payment.amount': totalAmount,
-        'payment.paidAmount': 0,
-        'payment.remainingAmount': remainingAmount,
-        'payment.currency': 'INR',
-      },
+      updateFields,
       { new: true }
     );
 
@@ -106,11 +139,20 @@ export async function createPaymentOrder(req, res) {
       {
         orderId: razorpayOrder.id,
         amount: chargeAmount,
-        totalAmount,
+        totalAmount: effectiveAmount,
+        originalAmount: totalAmount,
         paymentType,
         remainingAmount,
         currency: 'INR',
         key: env.razorpayKeyId,
+        ...(couponData && {
+          coupon: {
+            code: couponCode,
+            discount: couponData.discount,
+            discountType: couponData.discountType,
+            discountValue: couponData.discountValue,
+          },
+        }),
       },
       'Payment order created successfully',
       201

@@ -5,6 +5,7 @@ import logger from '../utils/logger.js';
 import { AppError } from '../utils/errors.js';
 import InspectionRequest from '../models/InspectionRequest.js';
 import { forwardInspectionRequestToAdmin } from './customer.service.js';
+import { markCouponUsed } from '../integrations/adminClient.js';
 
 // Initialize Razorpay instance
 const razorpayInstance = new Razorpay({
@@ -176,6 +177,11 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
 
     if (!paidRequest) {
       throw new AppError('Failed to update inspection request after payment', 500);
+    }
+
+    // Mark coupon as used if one was applied
+    if (paidRequest.appliedCoupon?.code) {
+      await markCouponUsed(paidRequest.appliedCoupon.code, paidRequest.customerSnapshot?.phone);
     }
 
     // Forward to admin after payment (PAID or PARTIALLY_PAID)
