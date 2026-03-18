@@ -5,6 +5,8 @@ import {
   authenticateApple,
   getCurrentUser,
   updateProfile,
+  verifyEmailOTP,
+  resendOTP,
 } from '../services/auth.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
@@ -45,6 +47,26 @@ export async function appleAuth(req, res) {
     return successResponse(res, result, 'Apple authentication successful');
   } catch (error) {
     logger.error({ event: 'apple_auth_failed', error: error.message }, 'Apple auth failed');
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function verifyEmail(req, res) {
+  try {
+    const result = await verifyEmailOTP(req.body);
+    return successResponse(res, result, 'Email verified successfully');
+  } catch (error) {
+    logger.error({ event: 'verify_email_failed', error: error.message }, 'Email verification failed');
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function resendVerificationOTP(req, res) {
+  try {
+    const result = await resendOTP(req.body);
+    return successResponse(res, result, 'OTP sent successfully');
+  } catch (error) {
+    logger.error({ event: 'resend_otp_failed', error: error.message }, 'Resend OTP failed');
     return errorResponse(res, error.message, error.statusCode || 500);
   }
 }

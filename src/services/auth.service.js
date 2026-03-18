@@ -5,6 +5,9 @@ import User from '../models/User.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
+import { generateOTP, sendOTPEmail } from '../utils/email.js';
+
+const OTP_EXPIRY_MINUTES = 10;
 
 const googleClient = new OAuth2Client(env.googleClientId);
 
@@ -25,25 +28,49 @@ function buildAuthResponse(user) {
   };
 }
 
+// ─── OTP Helper ─────────────────────────────────────────────
+
+async function setAndSendOTP(user) {
+  const otp = generateOTP();
+  user.otp = otp;
+  user.otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+  await user.save();
+  await sendOTPEmail(user.email, otp);
+}
+
 // ─── Local Signup ───────────────────────────────────────────
 
 export async function signupLocal({ name, email, password, phone }) {
-  const existing = await User.findOne({ email: email.toLowerCase() });
-  if (existing) {
+  const normalizedEmail = email.toLowerCase();
+  const existing = await User.findOne({ email: normalizedEmail });
+
+  if (existing && existing.isEmailVerified) {
     throw new AppError('An account with this email already exists', 409);
+  }
+
+  // If unverified account exists, delete it so they can re-register
+  if (existing && !existing.isEmailVerified) {
+    await User.deleteOne({ _id: existing._id });
   }
 
   const user = await User.create({
     name,
-    email: email.toLowerCase(),
+    email: normalizedEmail,
     password,
     phone: phone || '',
     authProvider: 'local',
     isEmailVerified: false,
   });
 
-  logger.info({ event: 'user_signup', provider: 'local', userId: user._id }, 'New local user registered');
-  return buildAuthResponse(user);
+  try {
+    await setAndSendOTP(user);
+  } catch (err) {
+    logger.error({ event: 'signup_otp_email_failed', userId: user._id, error: err.message }, 'Failed to send OTP during signup');
+    return { email: user.email, message: 'Account created but failed to send OTP. Please use resend OTP.' };
+  }
+
+  logger.info({ event: 'user_signup', provider: 'local', userId: user._id }, 'New local user registered, OTP sent');
+  return { email: user.email, message: 'Verification OTP sent to your email' };
 }
 
 // ─── Local Login ────────────────────────────────────────────
@@ -65,6 +92,11 @@ export async function loginLocal({ email, password }) {
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     throw new AppError('Invalid email or password', 401);
+  }
+
+  if (!user.isEmailVerified) {
+    await setAndSendOTP(user);
+    throw new AppError('Email not verified. A new OTP has been sent to your email.', 403);
   }
 
   logger.info({ event: 'user_login', provider: 'local', userId: user._id }, 'Local user logged in');
@@ -195,6 +227,57 @@ export async function getCurrentUser(userId) {
     throw new AppError('User not found', 404);
   }
   return user.toSafeObject();
+}
+
+// ─── Verify Email OTP ───────────────────────────────────────
+
+export async function verifyEmailOTP({ email, otp }) {
+  const user = await User.findOne({ email: email.toLowerCase() }).select('+otp +otpExpiresAt');
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  if (user.isEmailVerified) {
+    throw new AppError('Email is already verified', 400);
+  }
+
+  if (!user.otp || !user.otpExpiresAt) {
+    throw new AppError('No OTP requested. Please request a new one.', 400);
+  }
+
+  if (new Date() > user.otpExpiresAt) {
+    throw new AppError('OTP has expired. Please request a new one.', 400);
+  }
+
+  if (user.otp !== otp) {
+    throw new AppError('Invalid OTP', 400);
+  }
+
+  user.isEmailVerified = true;
+  user.otp = null;
+  user.otpExpiresAt = null;
+  await user.save();
+
+  logger.info({ event: 'email_verified', userId: user._id }, 'Email verified via OTP');
+  return buildAuthResponse(user);
+}
+
+// ─── Resend OTP ─────────────────────────────────────────────
+
+export async function resendOTP({ email }) {
+  const user = await User.findOne({ email: email.toLowerCase() });
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  if (user.isEmailVerified) {
+    throw new AppError('Email is already verified', 400);
+  }
+
+  await setAndSendOTP(user);
+
+  logger.info({ event: 'otp_resent', userId: user._id }, 'OTP resent');
+  return { email: user.email, message: 'A new OTP has been sent to your email' };
 }
 
 // ─── Update Profile ─────────────────────────────────────────
