@@ -6,6 +6,7 @@ import vehicleMasterRoutes from './routes/vehicleMaster.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import couponRoutes from './routes/coupon.routes.js';
 import { getCancellationPolicy, forwardEnquiry } from './integrations/adminClient.js';
 import { env } from './config/env.js';
 import logger from './utils/logger.js';
@@ -113,6 +114,7 @@ app.post('/api/customer/enquiry', async (req, res) => {
 app.use('/api/customer/auth', authRoutes);
 app.use('/api/customer/vehicle-master', vehicleMasterRoutes);
 app.use('/api/customer/payments', paymentRoutes);
+app.use('/api/customer/coupons', couponRoutes);
 // Admin callback routes — service-to-service, no JWT auth
 // Admin BE calls: /api/customer/inspection-requests/:requestNumber/confirm-cancellation, etc.
 app.use('/api/customer/inspection-requests', adminRoutes);
