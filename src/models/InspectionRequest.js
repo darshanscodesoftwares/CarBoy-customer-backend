@@ -87,6 +87,15 @@ const inspectionRequestSchema = new mongoose.Schema(
       remainingPaidAt: { type: Date, default: null },
     },
 
+    appliedCoupon: {
+      code: { type: String, default: null },
+      discountType: { type: String, default: null },
+      discountValue: { type: Number, default: null },
+      discount: { type: Number, default: null },
+      originalAmount: { type: Number, default: null },
+      finalAmount: { type: Number, default: null },
+    },
+
     customerNotes: {
       type: String,
       default: '',

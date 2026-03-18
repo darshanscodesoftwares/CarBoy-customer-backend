@@ -71,6 +71,39 @@ export async function forwardEnquiry(payload) {
   }
 }
 
+export async function validateCoupon(code, phone, orderAmount) {
+  const url = `${env.adminBaseUrl}/coupons/validate`;
+
+  try {
+    const response = await axios.post(url, { code, phone, orderAmount }, {
+      timeout: env.adminTimeoutMs,
+    });
+
+    logger.info({ event: 'coupon_validate_success', code }, 'Coupon validated');
+    return response.data?.data;
+  } catch (error) {
+    const message = error.response?.data?.message || error.message || 'Failed to validate coupon';
+    logger.error({ event: 'coupon_validate_failed', code, error: message }, 'Coupon validation failed');
+    throw new AppError(message, error.response?.status || 502);
+  }
+}
+
+export async function markCouponUsed(code, phone) {
+  const url = `${env.adminBaseUrl}/coupons/mark-used`;
+
+  try {
+    await axios.post(url, { code, phone }, {
+      timeout: env.adminTimeoutMs,
+    });
+
+    logger.info({ event: 'coupon_marked_used', code, phone }, 'Coupon marked as used');
+  } catch (error) {
+    const message = error.response?.data?.message || error.message || 'Failed to mark coupon as used';
+    logger.error({ event: 'coupon_mark_used_failed', code, error: message }, 'Failed to mark coupon as used');
+    // Don't throw — coupon mark failure shouldn't block payment flow
+  }
+}
+
 export async function createAdminJob(jobPayload) {
   const url = `${env.adminBaseUrl}/inspection-requests`;
 
