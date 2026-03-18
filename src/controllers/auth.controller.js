@@ -4,6 +4,7 @@ import {
   authenticateGoogle,
   authenticateApple,
   getCurrentUser,
+  updateProfile,
 } from '../services/auth.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
@@ -54,6 +55,16 @@ export async function getMe(req, res) {
     return successResponse(res, user, 'User profile fetched');
   } catch (error) {
     logger.error({ event: 'get_me_failed', error: error.message }, 'Get profile failed');
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function updateMe(req, res) {
+  try {
+    const user = await updateProfile(req.userId, req.body);
+    return successResponse(res, user, 'Profile updated successfully');
+  } catch (error) {
+    logger.error({ event: 'update_me_failed', error: error.message }, 'Update profile failed');
     return errorResponse(res, error.message, error.statusCode || 500);
   }
 }

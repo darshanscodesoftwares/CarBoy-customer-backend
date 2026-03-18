@@ -196,3 +196,20 @@ export async function getCurrentUser(userId) {
   }
   return user.toSafeObject();
 }
+
+// ─── Update Profile ─────────────────────────────────────────
+
+export async function updateProfile(userId, { name, phone, address }) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  if (name !== undefined) user.name = name.trim();
+  if (phone !== undefined) user.phone = phone.trim();
+  if (address !== undefined) user.address = address.trim();
+
+  await user.save();
+  logger.info({ event: 'profile_updated', userId: user._id }, 'User profile updated');
+  return user.toSafeObject();
+}
