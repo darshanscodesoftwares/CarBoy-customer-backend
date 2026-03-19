@@ -2,6 +2,7 @@ import { confirmCancellation, confirmReschedule, handleAssignmentFailed, handleR
 import { storePaymentLinkDetails } from '../services/payment.service.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
+import InspectionRequest from '../models/InspectionRequest.js';
 
 export async function adminCancelConfirmed(req, res) {
   try {
@@ -91,6 +92,55 @@ export async function adminRefundConfirmed(req, res) {
     logger.error(
       { event: 'admin_refund_confirmed_failed', requestNumber: req.params.requestNumber, error: error.message },
       'Admin refund confirmation failed'
+    );
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function adminVshFileUploaded(req, res) {
+  try {
+    const { requestNumber } = req.params;
+    const { vshFile } = req.body;
+
+    if (!vshFile?.url) {
+      return errorResponse(res, 'vshFile.url is required', 400);
+    }
+
+    const request = await InspectionRequest.findOneAndUpdate(
+      { requestNumber },
+      {
+        $set: {
+          status: 'CONVERTED',
+          vshFile: {
+            url: vshFile.url,
+            originalName: vshFile.originalName || null,
+            mimeType: vshFile.mimeType || null,
+            uploadedAt: vshFile.uploadedAt || new Date(),
+          },
+        },
+        $push: {
+          statusHistory: {
+            from: 'PAID',
+            to: 'CONVERTED',
+            changedAt: new Date(),
+            changedBy: 'ADMIN',
+            note: 'VSH report uploaded by admin',
+          },
+        },
+      },
+      { new: true }
+    );
+
+    if (!request) {
+      return errorResponse(res, 'Inspection request not found', 404);
+    }
+
+    logger.info({ event: 'vsh_file_uploaded', requestNumber }, 'VSH file received from admin');
+    return successResponse(res, { requestNumber, status: request.status }, 'VSH file stored');
+  } catch (error) {
+    logger.error(
+      { event: 'vsh_file_upload_failed', requestNumber: req.params.requestNumber, error: error.message },
+      'VSH file upload callback failed'
     );
     return errorResponse(res, error.message, error.statusCode || 500);
   }
