@@ -15,22 +15,31 @@ export async function submitInspectionRequest(payload, userId) {
     // Extract and trim customerNotes from payload or customerSnapshot
     const customerNotes = (payload.customerNotes || payload.customerSnapshot?.notes || '').toString().trim().slice(0, 1000);
 
-    // Enrich vehicleSnapshot with price - gracefully handle admin service failures
+    const addOnVSH = payload.serviceType === 'UCI' && payload.addOnVSH === true;
+    const addOnVSHPrice = addOnVSH ? (payload.addOnVSHPrice || 499) : 0;
+
+    // Enrich vehicleSnapshot with price - skip for VSH (no brand/model master data)
     let enrichedVehicleSnapshot;
-    try {
-      enrichedVehicleSnapshot = await enrichVehicleSnapshotWithPrice(payload.vehicleSnapshot);
-    } catch (enrichError) {
-      logger.warn(
-        { event: 'price_enrichment_failed', error: enrichError.message },
-        'Failed to enrich vehicle price, continuing with price: null'
-      );
+    if (payload.serviceType === 'VSH') {
       enrichedVehicleSnapshot = { ...payload.vehicleSnapshot, price: null };
+    } else {
+      try {
+        enrichedVehicleSnapshot = await enrichVehicleSnapshotWithPrice(payload.vehicleSnapshot);
+      } catch (enrichError) {
+        logger.warn(
+          { event: 'price_enrichment_failed', error: enrichError.message },
+          'Failed to enrich vehicle price, continuing with price: null'
+        );
+        enrichedVehicleSnapshot = { ...payload.vehicleSnapshot, price: null };
+      }
     }
 
     const enrichedPayload = {
       ...payload,
       vehicleSnapshot: enrichedVehicleSnapshot,
       customerNotes,
+      addOnVSH,
+      addOnVSHPrice,
     };
 
     // Save to database with PENDING_PAYMENT status
@@ -119,6 +128,8 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
     paymentType: inspectionRequest.payment?.type || 'FULL',
     paidAmount: inspectionRequest.payment?.paidAmount || 0,
     remainingAmount: inspectionRequest.payment?.remainingAmount || 0,
+    addOnVSH: inspectionRequest.addOnVSH || false,
+    addOnVSHPrice: inspectionRequest.addOnVSHPrice || 0,
   };
 
   const adminResponse = await createAdminJob(adminJobPayload);
@@ -139,22 +150,23 @@ export async function getInspectionRequests(userId) {
   const filter = userId ? { userId } : {};
   const requests = await InspectionRequest.find(filter)
     .sort({ createdAt: -1 })
-    .select('requestNumber serviceType status schedule vehicleSnapshot location createdAt cancellation reschedule assignmentFailure refund payment');
+    .select('requestNumber serviceType status schedule vehicleSnapshot location createdAt cancellation reschedule assignmentFailure refund payment vshFile');
 
   return requests.map((item) => ({
     requestId: item.requestNumber,
     serviceType: item.serviceType,
     status: item.status,
-    schedule: item.schedule || null,
-    scheduledDate: item.schedule?.date,
+    schedule: item.schedule?.date ? item.schedule : null,
+    scheduledDate: item.schedule?.date || null,
     vehicleSnapshot: item.vehicleSnapshot || null,
-    location: item.location || null,
+    location: item.location?.address ? item.location : null,
     createdAt: item.createdAt,
     cancellation: item.cancellation || null,
     reschedule: item.reschedule || null,
     assignmentFailure: item.assignmentFailure || null,
     refund: item.refund || null,
     payment: item.payment || null,
+    vshFile: item.vshFile?.url ? item.vshFile : null,
   }));
 }
 
@@ -173,18 +185,21 @@ export async function getInspectionRequestById(requestId) {
       throw new AppError('Inspection request not found', 404);
     }
 
-    // Fetch vehicle price and add to vehicleSnapshot
-    const vehicleSnapshotWithPrice = await enrichVehicleSnapshotWithPrice(
-      inspectionRequest.vehicleSnapshot
-    );
+    // Fetch vehicle price — skip for VSH (no brand/model master data)
+    let vehicleSnapshotWithPrice;
+    if (inspectionRequest.serviceType === 'VSH') {
+      vehicleSnapshotWithPrice = inspectionRequest.vehicleSnapshot;
+    } else {
+      vehicleSnapshotWithPrice = await enrichVehicleSnapshotWithPrice(inspectionRequest.vehicleSnapshot);
+    }
 
     return {
       requestId: inspectionRequest.requestNumber,
       serviceType: inspectionRequest.serviceType,
       customerSnapshot: inspectionRequest.customerSnapshot,
       vehicleSnapshot: vehicleSnapshotWithPrice,
-      schedule: inspectionRequest.schedule,
-      location: inspectionRequest.location,
+      schedule: inspectionRequest.schedule?.date ? inspectionRequest.schedule : null,
+      location: inspectionRequest.location?.address ? inspectionRequest.location : null,
       status: inspectionRequest.status,
       payment: inspectionRequest.payment,
       customerNotes: inspectionRequest.customerNotes,
@@ -194,6 +209,7 @@ export async function getInspectionRequestById(requestId) {
       assignmentFailure: inspectionRequest.assignmentFailure || null,
       refund: inspectionRequest.refund || null,
       statusHistory: inspectionRequest.statusHistory || [],
+      vshFile: inspectionRequest.vshFile?.url ? inspectionRequest.vshFile : null,
       createdAt: inspectionRequest.createdAt,
       updatedAt: inspectionRequest.updatedAt,
     };

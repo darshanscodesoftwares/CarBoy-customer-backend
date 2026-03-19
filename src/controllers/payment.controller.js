@@ -15,7 +15,8 @@ import logger from '../utils/logger.js';
  */
 export async function createPaymentOrder(req, res) {
   try {
-    const { requestNumber, paymentType = 'FULL', couponCode } = req.body;
+    const { requestNumber, couponCode } = req.body;
+    let { paymentType = 'FULL' } = req.body;
 
     if (!requestNumber) {
       return errorResponse(res, 'Request number is required', 400);
@@ -42,19 +43,29 @@ export async function createPaymentOrder(req, res) {
       return errorResponse(res, 'Initial payment already completed. Awaiting remaining payment.', 400);
     }
 
-    // Check if request has a valid price
-    const totalAmount = inspectionRequest.vehicleSnapshot?.price;
-    if (!totalAmount || totalAmount <= 0) {
+    // Check if request has a valid price — VSH has fixed price of 499
+    const VSH_FIXED_PRICE = 499;
+    const rawPrice = inspectionRequest.vehicleSnapshot?.price;
+    const baseAmount = (inspectionRequest.serviceType === 'VSH' && (!rawPrice || rawPrice <= 0))
+      ? VSH_FIXED_PRICE
+      : rawPrice;
+
+    if (!baseAmount || baseAmount <= 0) {
       logger.warn(
         {
           event: 'invalid_payment_amount',
           requestNumber,
-          amount: totalAmount,
+          amount: baseAmount,
         },
         'Cannot create payment order without valid vehicle price'
       );
       return errorResponse(res, 'Vehicle price not available for this request', 400);
     }
+
+    // Add VSH add-on price if applicable
+    const addOnVSH = inspectionRequest.addOnVSH || false;
+    const addOnVSHPrice = addOnVSH ? (inspectionRequest.addOnVSHPrice || 499) : 0;
+    const totalAmount = baseAmount + addOnVSHPrice;
 
     // Validate and apply coupon if provided
     let couponData = null;
@@ -152,6 +163,9 @@ export async function createPaymentOrder(req, res) {
             discountType: couponData.discountType,
             discountValue: couponData.discountValue,
           },
+        }),
+        ...(addOnVSH && {
+          addOn: { vsh: true, price: addOnVSHPrice },
         }),
       },
       'Payment order created successfully',
