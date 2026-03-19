@@ -7,13 +7,15 @@ function isValidDateInput(dateInput) {
 }
 
 export function validateInspectionRequest(req, res, next) {
-  const { serviceType, customerSnapshot, vehicleSnapshot, schedule, location } = req.body;
+  const { serviceType, customerSnapshot, vehicleSnapshot, schedule, location, addOnVSH } = req.body;
 
-  console.log("🔍 Backend received serviceType:", serviceType, "Type:", typeof serviceType);
+  if (addOnVSH && serviceType !== 'UCI') {
+    return errorResponse(res, 'VSH add-on is only available for UCI bookings', 400);
+  }
 
-  if (!['PDI', 'UCI'].includes(serviceType)) {
+  if (!['PDI', 'UCI', 'VSH'].includes(serviceType)) {
     logger.warn({ event: 'validation_failed', reason: 'invalid_service_type', receivedValue: serviceType }, 'Validation failed');
-    return errorResponse(res, `serviceType must be either PDI or UCI (received: "${serviceType}")`, 400);
+    return errorResponse(res, `serviceType must be PDI, UCI, or VSH (received: "${serviceType}")`, 400);
   }
 
   if (!customerSnapshot?.name || !customerSnapshot?.phone || !customerSnapshot?.email) {
@@ -21,6 +23,16 @@ export function validateInspectionRequest(req, res, next) {
     return errorResponse(res, 'customerSnapshot.name, phone, and email are required', 400);
   }
 
+  if (serviceType === 'VSH') {
+    // VSH only needs model and registrationNumber
+    if (!vehicleSnapshot?.model || !vehicleSnapshot?.registrationNumber) {
+      logger.warn({ event: 'validation_failed', reason: 'invalid_vehicle_snapshot_vsh' }, 'Validation failed');
+      return errorResponse(res, 'vehicleSnapshot.model and registrationNumber are required for VSH', 400);
+    }
+    return next();
+  }
+
+  // PDI / UCI validations
   if (!vehicleSnapshot?.brand || !vehicleSnapshot?.model || !vehicleSnapshot?.year) {
     logger.warn({ event: 'validation_failed', reason: 'invalid_vehicle_snapshot' }, 'Validation failed');
     return errorResponse(res, 'vehicleSnapshot.brand, model, and year are required', 400);
