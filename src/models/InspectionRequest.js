@@ -28,25 +28,32 @@ const inspectionRequestSchema = new mongoose.Schema(
     },
 
     vehicleSnapshot: {
-      brand: { type: String, required: true },
+      brand: { type: String, default: '' },
       model: { type: String, required: true },
-      year: { type: Number, required: true },
+      year: { type: Number, default: null },
       vin: { type: String, default: '' },
       registrationNumber: { type: String, default: '' },
       price: { type: Number, default: null },
     },
 
     schedule: {
-      date: { type: Date, required: true },
-      slot: { type: String, required: true },
+      date: { type: Date, default: null },
+      slot: { type: String, default: '' },
     },
 
     location: {
-      address: { type: String, required: true },
+      address: { type: String, default: '' },
       coordinates: {
-        lat: { type: Number, required: true },
-        lng: { type: Number, required: true },
+        lat: { type: Number, default: null },
+        lng: { type: Number, default: null },
       },
+    },
+
+    vshFile: {
+      url: { type: String, default: null },
+      originalName: { type: String, default: null },
+      mimeType: { type: String, default: null },
+      uploadedAt: { type: Date, default: null },
     },
 
     adminJobId: {
@@ -60,7 +67,7 @@ const inspectionRequestSchema = new mongoose.Schema(
         'PENDING_PAYMENT', 'PARTIALLY_PAID', 'PAID', 'FORWARDED',
         'CANCELLATION_REQUESTED', 'CANCELLED',
         'RESCHEDULE_REQUESTED', 'RESCHEDULED',
-        'ASSIGNMENT_FAILED', 'REFUNDED', 'FAILED',
+        'ASSIGNMENT_FAILED', 'REFUNDED', 'FAILED', 'CONVERTED',
       ],
       default: 'PENDING_PAYMENT',
     },
@@ -95,6 +102,9 @@ const inspectionRequestSchema = new mongoose.Schema(
       originalAmount: { type: Number, default: null },
       finalAmount: { type: Number, default: null },
     },
+
+    addOnVSH: { type: Boolean, default: false },
+    addOnVSHPrice: { type: Number, default: 0 },
 
     customerNotes: {
       type: String,
