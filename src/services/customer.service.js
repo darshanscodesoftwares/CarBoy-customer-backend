@@ -83,7 +83,7 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
     throw new AppError('Inspection request is required for admin forwarding', 400);
   }
 
-  if (inspectionRequest.status === 'FORWARDED') {
+  if (inspectionRequest.adminJobId) {
     logger.info(
       {
         event: 'admin_forwarding_skipped_already_forwarded',
@@ -287,8 +287,8 @@ async function enrichVehicleSnapshotWithPrice(vehicleSnapshot) {
   }
 }
 
-const CANCELLABLE_STATUSES = ['FORWARDED', 'RESCHEDULED', 'PAID', 'PARTIALLY_PAID'];
-const RESCHEDULABLE_STATUSES = ['FORWARDED', 'PAID', 'PARTIALLY_PAID'];
+const CANCELLABLE_STATUSES = ['RESCHEDULED', 'PAID', 'PARTIALLY_PAID'];
+const RESCHEDULABLE_STATUSES = ['PAID', 'PARTIALLY_PAID'];
 
 export async function requestCancellation(requestNumber, userId, reason) {
   const request = await InspectionRequest.findOneAndUpdate(

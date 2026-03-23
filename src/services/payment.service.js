@@ -127,7 +127,7 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
     }
 
     // Idempotency: if request already forwarded, skip processing
-    if (inspectionRequest.status === 'FORWARDED') {
+    if (inspectionRequest.adminJobId) {
       logger.warn(
         {
           event: 'duplicate_payment_confirmation_already_forwarded',
@@ -188,15 +188,10 @@ export async function markPaymentSuccessful(razorpayOrderId, razorpayPaymentId) 
     const adminResponse = await forwardInspectionRequestToAdmin(paidRequest);
 
     let finalRequest = paidRequest;
-    if (adminResponse) {
-      const forwardedUpdate = { status: 'FORWARDED' };
-      if (adminResponse.data?.id) {
-        forwardedUpdate.adminJobId = adminResponse.data.id;
-      }
-
+    if (adminResponse && adminResponse.data?.id) {
       finalRequest = await InspectionRequest.findByIdAndUpdate(
         paidRequest._id,
-        forwardedUpdate,
+        { adminJobId: adminResponse.data.id },
         { new: true }
       );
     }
