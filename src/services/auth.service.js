@@ -105,14 +105,22 @@ export async function loginLocal({ email, password }) {
 
 // ─── Google OAuth ───────────────────────────────────────────
 
-export async function authenticateGoogle({ idToken }) {
+export async function authenticateGoogle({ idToken, access_token }) {
   let payload;
   try {
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: env.googleClientId,
-    });
-    payload = ticket.getPayload();
+    if (idToken) {
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: env.googleClientId,
+      });
+      payload = ticket.getPayload();
+    } else if (access_token) {
+      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+      if (!res.ok) throw new Error('Invalid access token');
+      payload = await res.json();
+    }
   } catch (err) {
     logger.error({ event: 'google_token_verify_failed', error: err.message }, 'Google token verification failed');
     throw new AppError('Invalid Google token', 401);

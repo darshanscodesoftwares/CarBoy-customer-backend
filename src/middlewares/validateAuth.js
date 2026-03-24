@@ -38,10 +38,10 @@ export function validateLogin(req, res, next) {
 }
 
 export function validateGoogleAuth(req, res, next) {
-  const { idToken } = req.body;
+  const { idToken, access_token } = req.body;
 
-  if (!idToken || typeof idToken !== 'string') {
-    return errorResponse(res, 'Google ID token is required', 400);
+  if ((!idToken || typeof idToken !== 'string') && (!access_token || typeof access_token !== 'string')) {
+    return errorResponse(res, 'Google ID token or access token is required', 400);
   }
 
   return next();
