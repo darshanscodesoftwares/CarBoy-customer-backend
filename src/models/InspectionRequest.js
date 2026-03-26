@@ -67,7 +67,7 @@ const inspectionRequestSchema = new mongoose.Schema(
         'PENDING_PAYMENT', 'PARTIALLY_PAID', 'PAID', 'FORWARDED',
         'CANCELLATION_REQUESTED', 'CANCELLED',
         'RESCHEDULE_REQUESTED', 'RESCHEDULED',
-        'ASSIGNMENT_FAILED', 'REFUNDED', 'FAILED', 'CONVERTED',
+        'ASSIGNMENT_FAILED', 'REFUNDED', 'FAILED', 'EXPERT_ASSIGNED',
       ],
       default: 'PENDING_PAYMENT',
     },

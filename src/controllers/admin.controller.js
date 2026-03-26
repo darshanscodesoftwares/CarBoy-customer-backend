@@ -110,7 +110,7 @@ export async function adminVshFileUploaded(req, res) {
       { requestNumber },
       {
         $set: {
-          status: 'CONVERTED',
+          status: 'EXPERT_ASSIGNED',
           vshFile: {
             url: vshFile.url,
             originalName: vshFile.originalName || null,
@@ -121,7 +121,7 @@ export async function adminVshFileUploaded(req, res) {
         $push: {
           statusHistory: {
             from: 'PAID',
-            to: 'CONVERTED',
+            to: 'EXPERT_ASSIGNED',
             changedAt: new Date(),
             changedBy: 'ADMIN',
             note: 'VSH report uploaded by admin',
