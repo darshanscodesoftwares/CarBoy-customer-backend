@@ -148,6 +148,8 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
 
 export async function getInspectionRequests(userId) {
   const filter = userId ? { userId } : {};
+  // Hide VSH requests still in PENDING_PAYMENT (user abandoned payment)
+  filter.$nor = [{ serviceType: 'VSH', status: 'PENDING_PAYMENT' }];
   const requests = await InspectionRequest.find(filter)
     .sort({ createdAt: -1 })
     .select('requestNumber serviceType status schedule vehicleSnapshot location createdAt cancellation reschedule assignmentFailure refund payment vshFile');
