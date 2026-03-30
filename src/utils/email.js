@@ -3,10 +3,12 @@ import { env } from '../config/env.js';
 import logger from './logger.js';
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.zoho.in',
+  port: 465,
+  secure: true,
   auth: {
-    user: env.gmailUser,
-    pass: env.gmailAppPassword,
+    user: env.zohoUser,
+    pass: env.zohoPass,
   },
 });
 
@@ -16,7 +18,7 @@ export function generateOTP() {
 
 export async function sendOTPEmail(to, otp) {
   const mailOptions = {
-    from: `"MyCarBoy" <${env.gmailUser}>`,
+    from: `"MyCarBoy" <${env.zohoUser}>`,
     to,
     subject: 'Verify your email - MyCarBoy',
     html: `

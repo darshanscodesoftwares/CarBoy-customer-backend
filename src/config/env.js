@@ -36,9 +36,9 @@ export const env = {
   // OAuth - Apple
   appleClientId: process.env.APPLE_CLIENT_ID || '', // Your app's Services ID (e.g. com.carboy.auth)
 
-  // Email (Gmail Nodemailer)
-  gmailUser: process.env.GMAIL_USER || '',
-  gmailAppPassword: process.env.GMAIL_APP_PASSWORD || '',
+  // Email (Zoho SMTP)
+  zohoUser: process.env.ZOHO_USER || '',
+  zohoPass: process.env.ZOHO_PASS || '',
 };
 
 // Validate required environment variables
