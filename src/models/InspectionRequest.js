@@ -41,6 +41,12 @@ const inspectionRequestSchema = new mongoose.Schema(
       slot: { type: String, default: '' },
     },
 
+    district: {
+      type: String,
+      enum: ['Chennai', 'Coimbatore'],
+      default: '',
+    },
+
     location: {
       address: { type: String, default: '' },
       coordinates: {

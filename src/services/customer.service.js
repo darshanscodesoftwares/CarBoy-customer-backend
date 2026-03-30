@@ -122,6 +122,7 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
     customerSnapshot: customerSnapshotWithNotes,
     vehicleSnapshot: inspectionRequest.vehicleSnapshot,
     schedule: inspectionRequest.schedule,
+    district: inspectionRequest.district || '',
     location: inspectionRequest.location,
     customerNotes,
     requestNumber: inspectionRequest.requestNumber,
