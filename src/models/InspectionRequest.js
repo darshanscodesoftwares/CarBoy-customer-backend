@@ -43,7 +43,6 @@ const inspectionRequestSchema = new mongoose.Schema(
 
     district: {
       type: String,
-      enum: ['Chennai', 'Coimbatore'],
       default: '',
     },
 
