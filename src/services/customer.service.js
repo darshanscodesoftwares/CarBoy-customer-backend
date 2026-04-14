@@ -42,6 +42,17 @@ export async function submitInspectionRequest(payload, userId) {
       addOnVSHPrice,
     };
 
+    // Derive district from address if not provided — availability service
+    // filters bookings by district, so an empty string makes the booking invisible
+    if (!enrichedPayload.district) {
+      const addressLower = (enrichedPayload.location?.address || '').toLowerCase();
+      if (addressLower.includes('coimbatore')) {
+        enrichedPayload.district = 'Coimbatore';
+      } else if (addressLower.includes('chennai')) {
+        enrichedPayload.district = 'Chennai';
+      }
+    }
+
     // Save to database with PENDING_PAYMENT status
     // Admin will receive this request ONLY after payment is confirmed via webhook
     const inspectionRequest = await InspectionRequest.create({
