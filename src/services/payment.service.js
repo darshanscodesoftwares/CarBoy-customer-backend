@@ -259,6 +259,7 @@ export async function markRemainingPaymentSuccessful(paymentLinkId, razorpayPaym
     const updated = await InspectionRequest.findByIdAndUpdate(
       inspectionRequest._id,
       {
+        status: 'PAID',
         'payment.status': 'PAID',
         'payment.paidAmount': inspectionRequest.payment.amount,
         'payment.remainingAmount': 0,
@@ -277,6 +278,16 @@ export async function markRemainingPaymentSuccessful(paymentLinkId, razorpayPaym
       },
       'Remaining payment marked as successful'
     );
+
+    // Re-forward to admin so admin UI reflects the now-fully-paid state
+    try {
+      await forwardInspectionRequestToAdmin(updated);
+    } catch (syncError) {
+      logger.warn(
+        { event: 'admin_sync_after_remaining_failed', requestNumber: updated.requestNumber, error: syncError.message },
+        'Failed to sync admin after remaining payment (admin UI may show stale data)'
+      );
+    }
 
     return updated;
   } catch (error) {
