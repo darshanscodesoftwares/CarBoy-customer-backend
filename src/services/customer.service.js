@@ -15,17 +15,8 @@ export async function submitInspectionRequest(payload, userId) {
     // Extract and trim customerNotes from payload or customerSnapshot
     const customerNotes = (payload.customerNotes || payload.customerSnapshot?.notes || '').toString().trim().slice(0, 1000);
 
-    console.log('[Booking BE] Received payload', {
-      serviceType: payload.serviceType,
-      payloadAddOnVSH: payload.addOnVSH,
-      payloadAddOnVSHType: typeof payload.addOnVSH,
-      payloadAddOnVSHPrice: payload.addOnVSHPrice,
-    });
-
     const addOnVSH = payload.serviceType === 'UCI' && payload.addOnVSH === true;
     const addOnVSHPrice = addOnVSH ? (payload.addOnVSHPrice || 499) : 0;
-
-    console.log('[Booking BE] Computed', { addOnVSH, addOnVSHPrice });
 
     // Enrich vehicleSnapshot with price - skip for VSH (no brand/model master data)
     let enrichedVehicleSnapshot;
