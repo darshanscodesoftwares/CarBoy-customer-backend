@@ -3,6 +3,7 @@ import { getBrands, getModelsByBrand } from './vehicleMaster.service.js';
 import { createAdminJob, notifyAdminCancellation, notifyAdminReschedule } from '../integrations/adminClient.js';
 import logger from '../utils/logger.js';
 import { AppError } from '../utils/errors.js';
+import { isScheduleInFuture } from '../utils/slot.js';
 
 /**
  * Submit inspection request - ONLY creates local record
@@ -12,6 +13,17 @@ import { AppError } from '../utils/errors.js';
  */
 export async function submitInspectionRequest(payload, userId) {
   try {
+    // Reject bookings whose slot start is already in the past (or starts within
+    // the next 60 min — too soon for admin to assign + tech to travel).
+    if (payload.schedule?.date && payload.schedule?.slot) {
+      if (!isScheduleInFuture(payload.schedule.date, payload.schedule.slot, 60)) {
+        throw new AppError(
+          'Selected slot is in the past or starts too soon. Please pick a later slot.',
+          400
+        );
+      }
+    }
+
     // Extract and trim customerNotes from payload or customerSnapshot
     const customerNotes = (payload.customerNotes || payload.customerSnapshot?.notes || '').toString().trim().slice(0, 1000);
 
