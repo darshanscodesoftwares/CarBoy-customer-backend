@@ -1,4 +1,5 @@
 import { submitInspectionRequest, getInspectionRequests, getInspectionRequestById, requestCancellation, requestReschedule } from '../services/customer.service.js';
+import { getSlotAvailability } from '../integrations/adminClient.js';
 import { successResponse, errorResponse } from '../utils/response.js';
 import logger from '../utils/logger.js';
 
@@ -72,6 +73,25 @@ export async function cancelInspectionRequest(req, res) {
       'Cancel inspection request failed'
     );
     return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
+export async function getRescheduleAvailability(req, res) {
+  try {
+    const { date, district, serviceType } = req.query;
+
+    if (!date || !district || !serviceType) {
+      return errorResponse(res, 'date, district, and serviceType are required', 400);
+    }
+
+    const result = await getSlotAvailability(date, district, serviceType);
+    return successResponse(res, result, 'Slot availability fetched');
+  } catch (error) {
+    logger.error(
+      { event: 'reschedule_availability_failed', error: error.message },
+      'Reschedule availability fetch failed'
+    );
+    return errorResponse(res, error.message || 'Unable to fetch availability', error.statusCode || 500);
   }
 }
 

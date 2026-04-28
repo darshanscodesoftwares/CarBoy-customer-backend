@@ -172,7 +172,7 @@ export async function getInspectionRequests(userId) {
   filter.$nor = [{ serviceType: 'VSH', status: 'PENDING_PAYMENT' }];
   const requests = await InspectionRequest.find(filter)
     .sort({ createdAt: -1 })
-    .select('requestNumber serviceType status schedule vehicleSnapshot location createdAt cancellation reschedule assignmentFailure refund payment vshFile');
+    .select('requestNumber serviceType status schedule vehicleSnapshot location district createdAt cancellation reschedule assignmentFailure refund payment vshFile');
 
   return requests.map((item) => ({
     requestId: item.requestNumber,
@@ -182,6 +182,7 @@ export async function getInspectionRequests(userId) {
     scheduledDate: item.schedule?.date || null,
     vehicleSnapshot: item.vehicleSnapshot || null,
     location: item.location?.address ? item.location : null,
+    district: item.district || '',
     createdAt: item.createdAt,
     cancellation: item.cancellation || null,
     reschedule: item.reschedule || null,
@@ -222,6 +223,7 @@ export async function getInspectionRequestById(requestId) {
       vehicleSnapshot: vehicleSnapshotWithPrice,
       schedule: inspectionRequest.schedule?.date ? inspectionRequest.schedule : null,
       location: inspectionRequest.location?.address ? inspectionRequest.location : null,
+      district: inspectionRequest.district || '',
       status: inspectionRequest.status,
       payment: inspectionRequest.payment,
       customerNotes: inspectionRequest.customerNotes,

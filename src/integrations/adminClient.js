@@ -104,6 +104,22 @@ export async function markCouponUsed(code, phone) {
   }
 }
 
+export async function getSlotAvailability(date, district, serviceType) {
+  const url = `${env.adminBaseUrl}/availability`;
+
+  try {
+    const response = await axios.get(url, {
+      params: { date, district, serviceType },
+      timeout: env.adminTimeoutMs,
+    });
+    return response.data?.data || response.data;
+  } catch (error) {
+    const message = error.response?.data?.message || error.message || 'Failed to fetch slot availability';
+    logger.error({ event: 'fetch_availability_failed', date, district, serviceType, error: message }, 'Slot availability fetch failed');
+    throw new AppError(`Failed to fetch slot availability: ${message}`, error.response?.status || 502);
+  }
+}
+
 export async function createAdminJob(jobPayload) {
   const url = `${env.adminBaseUrl}/inspection-requests`;
 

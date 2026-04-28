@@ -1,5 +1,5 @@
 import express from 'express';
-import { createInspectionRequest, listInspectionRequests, getInspectionRequestDetail, cancelInspectionRequest, rescheduleInspectionRequest } from '../controllers/customer.controller.js';
+import { createInspectionRequest, listInspectionRequests, getInspectionRequestDetail, cancelInspectionRequest, rescheduleInspectionRequest, getRescheduleAvailability } from '../controllers/customer.controller.js';
 import { validateInspectionRequest } from '../middlewares/validateRequest.js';
 import { authenticate } from '../middlewares/auth.js';
 
@@ -12,6 +12,7 @@ router.post('/inspection-request', validateInspectionRequest, createInspectionRe
 router.get('/inspection-requests', listInspectionRequests);
 router.get('/inspection-requests/:requestId', getInspectionRequestDetail);
 router.post('/inspection-requests/:requestId/cancel', cancelInspectionRequest);
+router.get('/availability', getRescheduleAvailability);
 router.post('/inspection-requests/:requestId/reschedule', rescheduleInspectionRequest);
 
 export default router;
