@@ -1,8 +1,15 @@
+import mongoose from 'mongoose';
 import InspectionRequest from '../models/InspectionRequest.js';
 import { getBrands, getModelsByBrand } from './vehicleMaster.service.js';
 import { createAdminJob, notifyAdminCancellation, notifyAdminReschedule } from '../integrations/adminClient.js';
 import logger from '../utils/logger.js';
 import { AppError } from '../utils/errors.js';
+
+// Lightweight read-only view of the shared Jobs collection
+const Job = mongoose.models.Job || mongoose.model('Job', new mongoose.Schema({ status: String }, { collection: 'jobs' }));
+
+// Job statuses that lock reschedule — IE has arrived or started
+const RESCHEDULE_LOCKED_JOB_STATUSES = new Set(['reached', 'in_inspection', 'inspection_completed', 'completed', 'report_sent']);
 
 /**
  * Submit inspection request - ONLY creates local record
@@ -172,25 +179,37 @@ export async function getInspectionRequests(userId) {
   filter.$nor = [{ serviceType: 'VSH', status: 'PENDING_PAYMENT' }];
   const requests = await InspectionRequest.find(filter)
     .sort({ createdAt: -1 })
-    .select('requestNumber serviceType status schedule vehicleSnapshot location district createdAt cancellation reschedule assignmentFailure refund payment vshFile');
+    .select('requestNumber serviceType status schedule vehicleSnapshot location district createdAt cancellation reschedule assignmentFailure refund payment vshFile adminJobId');
 
-  return requests.map((item) => ({
-    requestId: item.requestNumber,
-    serviceType: item.serviceType,
-    status: item.status,
-    schedule: item.schedule?.date ? item.schedule : null,
-    scheduledDate: item.schedule?.date || null,
-    vehicleSnapshot: item.vehicleSnapshot || null,
-    location: item.location?.address ? item.location : null,
-    district: item.district || '',
-    createdAt: item.createdAt,
-    cancellation: item.cancellation || null,
-    reschedule: item.reschedule || null,
-    assignmentFailure: item.assignmentFailure || null,
-    refund: item.refund || null,
-    payment: item.payment || null,
-    vshFile: item.vshFile?.url ? item.vshFile : null,
-  }));
+  // Batch-fetch live job statuses for requests that have a linked job
+  const jobIds = requests.map((r) => r.adminJobId).filter(Boolean);
+  const jobStatusMap = new Map();
+  if (jobIds.length > 0) {
+    const jobs = await Job.find({ _id: { $in: jobIds } }).select('_id status').lean();
+    jobs.forEach((j) => jobStatusMap.set(String(j._id), j.status));
+  }
+
+  return requests.map((item) => {
+    const jobStatus = item.adminJobId ? (jobStatusMap.get(String(item.adminJobId)) || null) : null;
+    return {
+      requestId: item.requestNumber,
+      serviceType: item.serviceType,
+      status: item.status,
+      jobStatus,
+      schedule: item.schedule?.date ? item.schedule : null,
+      scheduledDate: item.schedule?.date || null,
+      vehicleSnapshot: item.vehicleSnapshot || null,
+      location: item.location?.address ? item.location : null,
+      district: item.district || '',
+      createdAt: item.createdAt,
+      cancellation: item.cancellation || null,
+      reschedule: item.reschedule || null,
+      assignmentFailure: item.assignmentFailure || null,
+      refund: item.refund || null,
+      payment: item.payment || null,
+      vshFile: item.vshFile?.url ? item.vshFile : null,
+    };
+  });
 }
 
 /**
@@ -369,6 +388,15 @@ export async function requestCancellation(requestNumber, userId, reason) {
 }
 
 export async function requestReschedule(requestNumber, userId, newSchedule, reason) {
+  // Block reschedule if IE has already reached or started inspection
+  const existing = await InspectionRequest.findOne({ requestNumber, userId }).select('adminJobId status').lean();
+  if (existing?.adminJobId) {
+    const job = await Job.findById(existing.adminJobId).select('status').lean();
+    if (job && RESCHEDULE_LOCKED_JOB_STATUSES.has(job.status)) {
+      throw new AppError('Reschedule is not allowed after the inspection expert has arrived', 400);
+    }
+  }
+
   const request = await InspectionRequest.findOneAndUpdate(
     { requestNumber, userId, status: { $in: RESCHEDULABLE_STATUSES } },
     {
