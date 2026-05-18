@@ -95,14 +95,19 @@ app.post('/api/customer/enquiry', async (req, res) => {
     logger.info({ event: 'enquiry_received', body: req.body }, 'Enquiry payload received');
     const fullName = (req.body.fullName || req.body.name || '').trim();
     const phoneNumber = (req.body.phoneNumber || req.body.phone || '').trim();
+    const email = (req.body.email || '').trim();
     const address = (req.body.address || '').trim();
+    const city = (req.body.city || '').trim();
+    const location = req.body.location || {};
+    const vehicle = req.body.vehicle || {};
+    const notes = (req.body.notes || '').trim();
     const message = (req.body.message || '').trim();
 
     if (!fullName || !phoneNumber || !address) {
       return res.status(400).json({ success: false, message: 'Full name, phone number, and address are required' });
     }
 
-    await forwardEnquiry({ fullName, phoneNumber, address, message });
+    await forwardEnquiry({ fullName, phoneNumber, email, address, city, location, vehicle, notes, message });
 
     return res.json({ success: true, message: 'Enquiry submitted successfully' });
   } catch (error) {
