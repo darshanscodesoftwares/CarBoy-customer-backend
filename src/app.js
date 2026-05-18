@@ -93,6 +93,7 @@ app.get('/api/customer/settings/cancellation-policy', async (req, res) => {
 app.post('/api/customer/enquiry', async (req, res) => {
   try {
     logger.info({ event: 'enquiry_received', body: req.body }, 'Enquiry payload received');
+    const type = (req.body.type || 'CONTACT').trim();
     const fullName = (req.body.fullName || req.body.name || '').trim();
     const phoneNumber = (req.body.phoneNumber || req.body.phone || '').trim();
     const email = (req.body.email || '').trim();
@@ -107,7 +108,7 @@ app.post('/api/customer/enquiry', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Full name, phone number, and address are required' });
     }
 
-    await forwardEnquiry({ fullName, phoneNumber, email, address, city, location, vehicle, notes, message });
+    await forwardEnquiry({ type, fullName, phoneNumber, email, address, city, location, vehicle, notes, message });
 
     return res.json({ success: true, message: 'Enquiry submitted successfully' });
   } catch (error) {
