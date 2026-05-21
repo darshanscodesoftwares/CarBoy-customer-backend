@@ -23,7 +23,8 @@ export async function submitInspectionRequest(payload, userId) {
     const customerNotes = (payload.customerNotes || payload.customerSnapshot?.notes || '').toString().trim().slice(0, 1000);
 
     const addOnVSH = payload.serviceType === 'UCI' && payload.addOnVSH === true;
-    const addOnVSHPrice = addOnVSH ? (payload.addOnVSHPrice || 499) : 0;
+    const addOnVSHPrice = addOnVSH ? (payload.addOnVSHPrice || 588) : 0;
+    const addOnVSHRegNo = addOnVSH ? (payload.addOnVSHRegNo || null) : null;
 
     // Enrich vehicleSnapshot with price - skip for VSH (no brand/model master data)
     let enrichedVehicleSnapshot;
@@ -47,6 +48,7 @@ export async function submitInspectionRequest(payload, userId) {
       customerNotes,
       addOnVSH,
       addOnVSHPrice,
+      addOnVSHRegNo,
     };
 
     // Derive district from address if not provided — availability service
