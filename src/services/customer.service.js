@@ -334,7 +334,7 @@ async function enrichVehicleSnapshotWithPrice(vehicleSnapshot) {
 }
 
 const CANCELLABLE_STATUSES = ['RESCHEDULED', 'PAID', 'PARTIALLY_PAID', 'EXPERT_ASSIGNED'];
-const RESCHEDULABLE_STATUSES = ['PAID', 'PARTIALLY_PAID'];
+const RESCHEDULABLE_STATUSES = ['PAID', 'PARTIALLY_PAID', 'RESCHEDULED', 'EXPERT_ASSIGNED'];
 
 export async function requestCancellation(requestNumber, userId, reason) {
   const request = await InspectionRequest.findOneAndUpdate(
