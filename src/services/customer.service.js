@@ -159,6 +159,7 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
     },
     addOnVSH: inspectionRequest.addOnVSH || false,
     addOnVSHPrice: inspectionRequest.addOnVSHPrice || 0,
+    addOnVSHRegNo: inspectionRequest.addOnVSHRegNo || null,
   };
 
   const adminResponse = await createAdminJob(adminJobPayload);

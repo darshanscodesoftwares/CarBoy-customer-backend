@@ -110,6 +110,7 @@ const inspectionRequestSchema = new mongoose.Schema(
 
     addOnVSH: { type: Boolean, default: false },
     addOnVSHPrice: { type: Number, default: 0 },
+    addOnVSHRegNo: { type: String, default: null },
 
     customerNotes: {
       type: String,
