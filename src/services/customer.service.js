@@ -3,6 +3,7 @@ import InspectionRequest from '../models/InspectionRequest.js';
 import { getBrands, getModelsByBrand } from './vehicleMaster.service.js';
 import { createAdminJob, notifyAdminCancellation, notifyAdminReschedule } from '../integrations/adminClient.js';
 import logger from '../utils/logger.js';
+import { resolveChennaiZone } from '../utils/resolveDistrict.js';
 import { AppError } from '../utils/errors.js';
 
 // Lightweight read-only view of the shared Jobs collection
@@ -58,7 +59,7 @@ export async function submitInspectionRequest(payload, userId) {
       if (addressLower.includes('coimbatore')) {
         enrichedPayload.district = 'Coimbatore';
       } else if (addressLower.includes('chennai')) {
-        enrichedPayload.district = 'Chennai';
+        enrichedPayload.district = resolveChennaiZone(enrichedPayload.location?.coordinates?.lat);
       }
     }
 
