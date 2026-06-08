@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { nextSequence, ensureSeeded } from './Counter.js';
 
 const inspectionRequestSchema = new mongoose.Schema(
   {
@@ -162,22 +163,24 @@ const inspectionRequestSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Auto-generate requestNumber using an ATOMIC shared counter (Counter
+// collection, _id="requestNumber"). The old read-max-then-+1 logic had a race:
+// two bookings created within the same instant both read the same max and got
+// assigned the SAME REQ number, which then cross-linked their payments/notes
+// downstream (REQ-000533 incident, 2026-06-08). The atomic $inc makes a
+// duplicate impossible. The unique index on requestNumber is the final backstop.
 inspectionRequestSchema.pre('save', async function preSave(next) {
   if (this.requestNumber) return next();
-
-  const last = await mongoose.model('InspectionRequest')
-    .findOne({}, { requestNumber: 1 })
-    .sort({ requestNumber: -1 })
-    .lean();
-
-  let nextNum = 1;
-  if (last?.requestNumber) {
-    const match = last.requestNumber.match(/^REQ-(\d+)$/);
-    if (match) nextNum = parseInt(match[1], 10) + 1;
+  try {
+    // Seed the counter from existing data on first use (no-op afterwards), so
+    // numbering continues from the current max instead of restarting at 1.
+    await ensureSeeded('requestNumber', this.constructor, 'requestNumber', 4);
+    const seq = await nextSequence('requestNumber');
+    this.requestNumber = `REQ-${String(seq).padStart(6, '0')}`;
+    return next();
+  } catch (err) {
+    return next(err);
   }
-
-  this.requestNumber = `REQ-${String(nextNum).padStart(6, '0')}`;
-  return next();
 });
 
 const InspectionRequest = mongoose.model('InspectionRequest', inspectionRequestSchema);
