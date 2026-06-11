@@ -178,7 +178,13 @@ export async function forwardInspectionRequestToAdmin(inspectionRequest) {
 }
 
 export async function getInspectionRequests(userId) {
-  const filter = userId ? { userId } : {};
+  // SECURITY: never fall back to {} (return-all). A missing userId previously
+  // matched { userId: null } across the whole guest-booking pool, exposing
+  // every customer's bookings/refunds/contact info on one profile (privacy
+  // leak + the "someone else's refund showed on my profile" report). With no
+  // userId we return nothing.
+  if (!userId) return [];
+  const filter = { userId };
   // Hide VSH requests still in PENDING_PAYMENT (user abandoned payment)
   filter.$nor = [{ serviceType: 'VSH', status: 'PENDING_PAYMENT' }];
   const requests = await InspectionRequest.find(filter)
