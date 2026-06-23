@@ -68,4 +68,42 @@ export async function ensureSeeded(name, Model, field, prefixLen) {
   );
 }
 
+/**
+ * Numeric max of Model[field] (format PREFIX-000123), computed in the DB so a
+ * string sort can never misorder different-length numbers. Returns 0 if none.
+ */
+export async function currentMax(Model, field, prefixLen) {
+  const rows = await Model.aggregate([
+    { $match: { [field]: new RegExp('^.+-\\d+$') } },
+    { $project: { n: { $toInt: { $substr: [`$${field}`, prefixLen, -1] } } } },
+    { $sort: { n: -1 } },
+    { $limit: 1 },
+  ]);
+  return rows.length ? rows[0].n : 0;
+}
+
+/**
+ * SELF-HEALING sequence allocator. Reserves the next seq atomically; if that
+ * value is <= the true max already present in the collection (i.e. the shared
+ * counter drifted behind the admin-BE's own counter), it bumps the counter to
+ * max+1 and reserves again. Guarantees the returned number is always strictly
+ * greater than every existing one, so a drifted counter can never hard-block a
+ * booking with an E11000 duplicate-key (manual-assign REQ-000577 incident,
+ * 2026-06-23). Mirrors admin-BE counter.model.js.
+ */
+export async function nextSequenceSafe(name, Model, field, prefixLen) {
+  await ensureSeeded(name, Model, field, prefixLen);
+  let seq = await nextSequence(name);
+  const max = await currentMax(Model, field, prefixLen);
+  if (seq <= max) {
+    const doc = await Counter.findByIdAndUpdate(
+      name,
+      { $max: { seq: max + 1 } },
+      { new: true, upsert: true }
+    );
+    seq = doc.seq <= max ? await nextSequence(name) : doc.seq;
+  }
+  return seq;
+}
+
 export default Counter;

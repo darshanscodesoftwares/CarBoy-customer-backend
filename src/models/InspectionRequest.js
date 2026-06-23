@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { nextSequence, ensureSeeded } from './Counter.js';
+import { nextSequenceSafe } from './Counter.js';
 
 const inspectionRequestSchema = new mongoose.Schema(
   {
@@ -172,10 +172,16 @@ const inspectionRequestSchema = new mongoose.Schema(
 inspectionRequestSchema.pre('save', async function preSave(next) {
   if (this.requestNumber) return next();
   try {
-    // Seed the counter from existing data on first use (no-op afterwards), so
-    // numbering continues from the current max instead of restarting at 1.
-    await ensureSeeded('requestNumber', this.constructor, 'requestNumber', 4);
-    const seq = await nextSequence('requestNumber');
+    // SELF-HEALING atomic shared counter — seeds on first use, and if the
+    // shared counter has drifted behind the admin-BE's counter it jumps past
+    // the true max so we never hard-fail with E11000 (REQ-000577 incident,
+    // 2026-06-23). See Counter.js nextSequenceSafe.
+    const seq = await nextSequenceSafe(
+      'requestNumber',
+      this.constructor,
+      'requestNumber',
+      4
+    );
     this.requestNumber = `REQ-${String(seq).padStart(6, '0')}`;
     return next();
   } catch (err) {
